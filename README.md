@@ -1,44 +1,18 @@
-[![Build Status](https://travis-ci.org/dave/blast.svg?branch=master)](https://travis-ci.org/dave/blast) [![Go Report Card](https://goreportcard.com/badge/github.com/dave/blast)](https://goreportcard.com/report/github.com/dave/blast) [![codecov](https://codecov.io/gh/dave/blast/branch/master/graph/badge.svg)](https://codecov.io/gh/dave/blast)
-
-
-
-
- Blast
- =====
+Blitskrige
+==========
+Blitskrige is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [Blast](https://github.com/dave/blast/).
+It exists to provide a solid foundation for building load testers with custom logic and processing yet with the 
+statistical foundation able to provide extensive details on the performance of a giving target.
 
  * Blast makes API requests at a fixed rate.
  * The number of concurrent workers is configurable.
- * The rate may be changed interactively during execution.
  * Blast is protocol agnostic, and adding a new worker type is trivial.
  * For load testing: random data can be added to API requests.
- * For batch jobs: CSV data can be loaded from local file or GCS bucket, and successful items from previous runs are skipped.
 
- Installation
- ============
- ## Mac
- ```
- brew tap dave/blast
- brew install blast
- ```
-
- ## Linux
- See the [releases page](https://github.com/dave/blast/releases)
 
  ## From source
  ```
  go get -u github.com/dave/blast
- ```
-
- Examples
- ========
- Using the dummy worker to send at 20,000 requests per second (the dummy worker returns after a random wait, and occasionally returns errors):
- ```
- blast --rate=20000 --workers=1000 --worker-type="dummy" --worker-template='{"min":25,"max":50}'
- ```
-
- Using the http worker to request Google's homepage at one request per second (warning: this is making real http requests - don't turn the rate up!):
- ```
- blast --rate=1 --worker-type="http" --payload-template='{"method":"GET","url":"http://www.google.com/"}'
  ```
 
  Status
@@ -97,16 +71,6 @@
 
  Environment variables and command line flags override config file options. Environment variables are upper case and prefixed with "BLAST" e.g. `BLAST_PAYLOAD_TEMPLATE`.
 
- Templates
- =========
- The `payload-template` and `worker-template` options accept values that are rendered using the Go text/template system. Variables of the form `{{ .name }}` or `{{ "name" }}` are replaced with data.
-
- Additionally, several simple functions are available to inject random data which is useful in load testing scenarios:
-
- * `{{ rand_int -5 5 }}` - a random integer between -5 and 5.
- * `{{ rand_float -5 5 }}` - a random float between -5 and 5.
- * `{{ rand_string 10 }}` - a random string, length 10.
-
 
 Workers
 =======
@@ -117,138 +81,16 @@ Starter and Stopper are interfaces a worker can optionally satisfy to provide in
 
 Examples
 ========
-
-For load testing:
-
-```yaml
-rate: 20000
-workers: 1000
-worker-type: "dummy"
-payload-template:
-  method: "POST"
-  path: "/foo/?id={{ rand_int 1 10000000 }}"
-worker-template:
-  print: false
-  base: "https://{{ .region }}.my-api.com"
-  min: 10
-  max: 20
-worker-variants:
-  - region: "europe-west1"
-  - region: "us-east1"
-```
-
-For bulk API tasks:
-
-```yaml
-# data would usually be the filename of a local CSV file, or an object in a GCS bucket. However, 
-# for the purposes of this example, a CSV fragment is also accepted.
-data: |
-  user_name,action
-  dave,subscribe
-  john,subscribe
-  pete,unsubscribe
-  jimmy,unsubscribe
-resume: true
-log: "out.log"
-rate: 100
-workers: 20
-worker-type: "dummy"
-payload-template: 
-  method: "POST"
-  path: "/{{ .user_name }}/{{ .action }}/{{ .type }}/"
-worker-template:  
-  print: true
-  base: "https://{{ .region }}.my-api.com"
-  min: 250
-  max: 500
-payload-variants: 
-  - type: "email"
-  - type: "phone"
-worker-variants: 
-  - region: "europe-west1"
-  - region: "us-east1"
-log-data:
-  - "user_name"
-  - "action"
-log-output: 
-  - "status"
-```
-
-Configuration options
-=====================
-
-data
-----
-Data sets the the data file to load. If none is specified, the worker will be called repeatedly until interrupted (useful for load testing). Load a local file or stream directly from a GCS bucket with `gs://{bucket}/{filename}.csv`. Data should be in csv format, and if `headers` is not specified the first record will be used as the headers. If a newline character is found, this string is read as the data.
-
-log
----
-Log sets the filename of the log file to create / append to.
-
-resume
-------
-Resume instructs the tool to load the log file and skip previously successful items. Failed items will be retried.
-
-rate
-----
-Rate sets the initial rate in requests per second. Simply enter a new rate during execution to adjust this. (Default: 10 requests / second).
-
-workers
--------
-Workers sets the number of concurrent workers. (Default: 10 workers).
-
-worker-type
------------
-WorkerType sets the selected worker type. Register new worker types with the `RegisterWorkerType` method.
-
-payload-template
-----------------
-PayloadTemplate sets the template that is rendered and passed to the worker `Send` method. When setting this by command line flag or environment variable, use a json encoded string.
-
-
-Advanced configuration options
-==============================
-
-timeout
--------
-Timeout sets the deadline in the context passed to the worker. Workers must respect this the context cancellation. We exit with an error if any worker is processing for timeout + 1 second. (Default: 1 second). 
-
-headers
--------
-Headers sets the data file headers. If omitted, the first record of the csv data source is used. When setting this by command line flag or environment variable, use a json encoded string.
-
-log-data
---------
-LogData sets an array of data fields to include in the output log. When setting this by command line flag or environment variable, use a json encoded string.
-
-log-output
-----------
-LogOutput sets an array of worker response fields to include in the output log. When setting this by command line flag or environment variable, use a json encoded string.
-
-worker-template
----------------
-WorkerTemplate sets a template to render and pass to the worker `Start` or `Stop` methods if the worker satisfies the `Starter` or `Stopper` interfaces. Use with `worker-variants` to configure several workers differently to spread load. When setting this by command line flag or environment variable, use a json encoded string.
-
-worker-variants
----------------
-WorkerVariants sets an array of maps that will cause each worker to be initialised with different data. When setting this by command line flag or environment variable, use a json encoded string.
-
-payload-variants
-----------------
-PayloadVariants sets an array of maps that will cause each data item to be repeated with the provided data. When setting this by command line flag or environment variable, use a json encoded string.
-
-Control by code
-===============
-The blaster package may be used to start blast from code without using the command. Here's a some 
+The blitskrige package may be used to start blast from code without using the command. Here's a some 
 examples of usage:
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
-b := blaster.New(ctx, cancel)
+b := blitskrige.New(ctx, cancel)
 defer b.Exit()
-b.SetWorker(func() blaster.Worker {
-	return &blaster.ExampleWorker{
-		SendFunc: func(ctx context.Context, self *blaster.ExampleWorker, in map[string]interface{}) (map[string]interface{}, error) {
+b.SetWorker(func() blitskrige.Worker {
+	return &blitskrige.ExampleWorker{
+		SendFunc: func(ctx context.Context, self *blitskrige.ExampleWorker, in map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{"status": 200}, nil
 		},
 	}
@@ -269,11 +111,11 @@ fmt.Printf("Fail == 0: %v", stats.All.Summary.Fail == 0)
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
-b := blaster.New(ctx, cancel)
+b := blitskrige.New(ctx, cancel)
 defer b.Exit()
-b.SetWorker(func() blaster.Worker {
-	return &blaster.ExampleWorker{
-		SendFunc: func(ctx context.Context, self *blaster.ExampleWorker, in map[string]interface{}) (map[string]interface{}, error) {
+b.SetWorker(func() blitskrige.Worker {
+	return &blitskrige.ExampleWorker{
+		SendFunc: func(ctx context.Context, self *blitskrige.ExampleWorker, in map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{"status": 200}, nil
 		},
 	}
@@ -299,7 +141,3 @@ wg.Wait()
 // Fail == 0: true
 ```
  
-To do
-=====  
-- [ ] Adjust rate automatically in response to latency? PID controller?  
-- [ ] Only use part of file: part i of j parts  
