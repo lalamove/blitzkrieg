@@ -1,4 +1,4 @@
-package blaster
+package blast
 
 import (
 	"context"
@@ -81,7 +81,6 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 }
 
 func (b *Blaster) send(ctx context.Context, w Worker, work workDef) error {
-
 	b.metrics.logStart(work.segment)
 	b.metrics.logBusy(work.segment)
 	b.metrics.busy.Inc(1)

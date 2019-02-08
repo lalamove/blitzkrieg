@@ -106,4 +106,4 @@ Package blaster provides the back-end for blast - a tool for load testing and se
  * `{{ rand_string 10 }}` - a random string, length 10.
 
 */
-package blaster
+package blast

@@ -1,4 +1,4 @@
-package blaster
+package blast
 
 import (
 	"encoding/json"
@@ -52,15 +52,6 @@ type Config struct {
 
 	// LogOutput sets an array of worker response fields to include in the output log. When setting this by command line flag or environment variable, use a json encoded string.
 	LogOutput []string `mapstructure:"log-output" json:"log-output"`
-
-	// PayloadVariants sets an array of maps that will cause each data item to be repeated with the provided data. When setting this by command line flag or environment variable, use a json encoded string.
-	PayloadVariants []map[string]string `mapstructure:"payload-variants" json:"payload-variants"`
-
-	// WorkerVariants sets an array of maps that will cause each worker to be initialised with different data. When setting this by command line flag or environment variable, use a json encoded string.
-	WorkerVariants []map[string]string `mapstructure:"worker-variants" json:"worker-variants"`
-
-	// WorkerTemplate sets a template to render and pass to the worker `Start` or `Stop` methods if the worker satisfies the `Starter` or `Stopper` interfaces. Use with `worker-variants` to configure several workers differently to spread load. When setting this by command line flag or environment variable, use a json encoded string.
-	WorkerTemplate map[string]interface{} `mapstructure:"worker-template" json:"worker-template"`
 
 	// Headers sets the data file headers. If omitted, the first record of the csv data source is used. When setting this by command line flag or environment variable, use a json encoded string.
 	Headers []string `mapstructure:"headers" json:"headers"`
@@ -161,10 +152,6 @@ func (b *Blaster) setupViper(configFlag string) error {
 	b.viper.SetDefault("log-data", []string{})
 	b.viper.SetDefault("log-output", []string{})
 	b.viper.SetDefault("headers", []string{})
-	b.viper.SetDefault("worker-template", map[string]interface{}{})
-	b.viper.SetDefault("payload-template", map[string]interface{}{})
-	b.viper.SetDefault("payload-variants", []map[string]string{{}})
-	b.viper.SetDefault("worker-variants", []map[string]string{{}})
 	b.viper.SetDefault("quiet", false)
 
 	b.viper.SetEnvPrefix("blast")
@@ -226,39 +213,6 @@ func (b *Blaster) unmarshalConfig(c *Config) error {
 			return errors.WithStack(err)
 		}
 	}
-	if err := b.viper.UnmarshalKey("worker-template", &c.WorkerTemplate); err != nil {
-		if s := b.viper.GetString("worker-template"); s != "" {
-			if err := json.Unmarshal([]byte(s), &c.WorkerTemplate); err != nil {
-				return errors.WithStack(err)
-			}
-		}
-	}
-	if err := b.viper.UnmarshalKey("payload-template", &c.PayloadTemplate); err != nil {
-		if s := b.viper.GetString("payload-template"); s != "" {
-			if err := json.Unmarshal([]byte(s), &c.PayloadTemplate); err != nil {
-				return errors.WithStack(err)
-			}
-		}
-	}
-	if s := b.viper.GetString("worker-variants"); s != "" {
-		// if array type data is actually a string, unmarshal it from json
-		if err := json.Unmarshal([]byte(s), &c.WorkerVariants); err != nil {
-			return errors.WithStack(err)
-		}
-	} else {
-		if err := b.viper.UnmarshalKey("worker-variants", &c.WorkerVariants); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-	if s := b.viper.GetString("payload-variants"); s != "" {
-		if err := json.Unmarshal([]byte(s), &c.PayloadVariants); err != nil {
-			return errors.WithStack(err)
-		}
-	} else {
-		if err := b.viper.UnmarshalKey("payload-variants", &c.PayloadVariants); err != nil {
-			return errors.WithStack(err)
-		}
-	}
 	if err := b.viper.UnmarshalKey("quiet", &c.Quiet); err != nil {
 		return errors.WithStack(err)
 	}
@@ -282,13 +236,6 @@ func (b *Blaster) Initialise(ctx context.Context, c Config) error {
 		b.LogOutput = c.LogOutput
 	}
 
-	if len(c.WorkerVariants) > 0 {
-		b.WorkerVariants = c.WorkerVariants
-	}
-	if len(c.PayloadVariants) > 0 {
-		b.PayloadVariants = c.PayloadVariants
-	}
-
 	if len(c.Headers) > 0 {
 		b.Headers = c.Headers
 	}
@@ -306,10 +253,6 @@ func (b *Blaster) Initialise(ctx context.Context, c Config) error {
 	}
 
 	if err := b.SetPayloadTemplate(c.PayloadTemplate); err != nil {
-		return err
-	}
-
-	if err := b.SetWorkerTemplate(c.WorkerTemplate); err != nil {
 		return err
 	}
 

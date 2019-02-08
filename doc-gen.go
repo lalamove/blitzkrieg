@@ -1,4 +1,4 @@
-package blaster
+package blast
 
 var doc = map[string]string{
 	"Blaster":                    "Blaster provides the back-end blast: a simple tool for API load testing and batch jobs. Use the New function to create a Blaster with default values.",

@@ -1,4 +1,4 @@
-package blaster
+package blast
 
 import (
 	"encoding/csv"

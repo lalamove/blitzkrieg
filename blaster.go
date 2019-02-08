@@ -1,4 +1,4 @@
-package blaster
+package blast
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"errors"
 
 	"time"
 
@@ -17,6 +18,16 @@ import (
 
 // Set debug to true to print the number of active goroutines with every status.
 const debug = false
+
+
+var (
+	// ErrWorkerNotFinished is returned when worker finished processing and response is not yet received.
+	ErrWorkerNotFinished = errors.New("worker response not yet received")
+
+	// ErrWorkerFinished is returned when worker is finished processing and response was received therefore not
+	// allowing changes to be made to it's context.
+	ErrWorkerFinished = errors.New("worker response already received")
+)
 
 // Blaster provides the back-end blast: a simple tool for API load testing and batch jobs. Use the New function to create a Blaster with default values.
 type Blaster struct {
@@ -316,19 +327,113 @@ func (b *Blaster) RegisterWorkerType(key string, workerFunc func() Worker) {
 	b.workerTypes[key] = workerFunc
 }
 
-// Worker is an interface that allows blast to easily be extended to support any protocol. See `main.go` for an example of how to build a command with your custom worker type.
-type Worker interface {
-	Send(ctx context.Context, payload map[string]interface{}) (response map[string]interface{}, err error)
+// Payload is defines the content to be used for a giving request with it's headers
+// body and possible parameters depending on the underline protocol logic.
+type Payload struct{
+	Body []byte
+	Params map[string]string
+	Headers map[string][]string
 }
 
-// Starter and Stopper are interfaces a worker can optionally satisfy to provide initialization or finalization logic. See `httpworker` and `dummyworker` for simple examples.
+// WorkerContext exists to define and contain the request body, headers and
+// response content, header and status for a giving request work done by
+// a worker. It also provides a means of providing response from a previous
+// request to a next request in a sequence or for the desire of alternating
+// the behaviour of the next worker based on the response from the last.
+type WorkerContext struct{
+	requestBody Payload
+	responseBody Payload
+
+	workerErr error
+	workerStatus string
+	finishedRequest bool
+	lastWorker *WorkerContext
+}
+
+// LastContext returns last request-request context for last execution
+// in a set sequence of request if any, else returning nil.
+func (w *WorkerContext) LastContext() *WorkerContext {
+	return w.lastWorker
+}
+
+// Error returns occured error for last executed worker.
+func (w *WorkerContext) Error() error {
+	return w.workerErr
+}
+
+// Request returns Payload for giving request context.
+func (w *WorkerContext) Request() Payload {
+	return w.requestBody
+}
+
+// Response returns Payload for giving response, this is only ever available
+// to the next sequence once the current has completed it's run in a
+// set of sequence request.
+func (w *WorkerContext) Response() (Payload, error) {
+	if w.finishedRequest {
+		return w.responseBody, nil
+	}
+	return w.responseBody, ErrWorkerNotFinished
+}
+
+// SetStatus sets the status code
+func (w *WorkerContext) SetStatus(code string) error {
+	if w.finishedRequest {
+		return ErrWorkerFinished
+	}
+	
+	w.workerStatus = code
+	return nil
+}
+
+// SetResponseBody sets the response body for a worker context if worker context has not already
+// be finalized.
+func (w *WorkerContext) SetResponseBody(b []byte) error {
+	if w.finishedRequest {
+		return ErrWorkerFinished
+	}
+
+	w.responseBody.Body = b
+	return nil
+}
+
+// SetResponseHeader sets the response header map for a worker context if worker context has not already
+// be finalized.
+func (w *WorkerContext) SetResponseHeader(h map[string][]string) error {
+	if w.finishedRequest {
+		return ErrWorkerFinished
+	}
+
+	w.responseBody.Headers = h
+	return nil
+}
+
+// SetWorkerError sets the worker error if not finalized and should be used when worker instance
+// finished with a error.
+func (w *WorkerContext) SetWorkerError(err error) error {
+	if w.finishedRequest {
+		return ErrWorkerFinished
+	}
+
+	w.workerErr = err
+	return nil
+}
+
+// Worker is an interface that allows blast to easily be extended to support any protocol. See `main.go` for
+// an example of how to build a command with your custom worker type.
+type Worker interface {
+	Send(ctx context.Context, workerCtx WorkerContext) error
+}
+
+// Starter is an interfaces a worker can optionally satisfy to provide initialization
+// logic.
 type Starter interface {
-	Start(ctx context.Context, payload map[string]interface{}) error
+	Start(ctx context.Context, payload Payload, lastCtx WorkerContext) (WorkerContext, error)
 }
 
 // Stopper is an interface a worker can optionally satisfy to provide finalization logic.
 type Stopper interface {
-	Stop(ctx context.Context, payload map[string]interface{}) error
+	Stop(ctx context.Context, workerCtx WorkerContext) error
 }
 
 func newThreadSafeWriter(w io.Writer) *threadSafeWriter {

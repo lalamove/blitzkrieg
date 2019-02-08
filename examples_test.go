@@ -1,4 +1,4 @@
-package blaster_test
+package blast_test
 
 import (
 	"context"
