@@ -1,24 +1,25 @@
 Blitskrige
 ==========
-Blitskrige is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [Blast](https://github.com/dave/blast/).
-It exists to provide a solid foundation for building load testers with custom logic and processing yet with the 
-statistical foundation able to provide extensive details on the performance of a giving target.
+Blitskrige is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [blast](https://github.com/dave/blast/).
 
- * Blast makes API requests at a fixed rate.
+Blitskrige builds solid foundation for building custom load testers with custom logic and behaviour yet with the 
+statistical foundation provided in [blast](https://github.com/dave/blast/), for extensive details on the performance
+of a API target. 
+
+ * Blitskrige makes API requests at a fixed rate.
  * The number of concurrent workers is configurable.
- * Blast is protocol agnostic, and adding a new worker type is trivial.
- * For load testing: random data can be added to API requests.
-
+ * The worker API allows custom protocols or logic for how a target get's tested
+ * Blitskrige builds a solid foundation for custom load testers.
 
  ## From source
  ```
- go get -u github.com/dave/blast
+ go get -u github.com/gokit/blitskrige
  ```
 
  Status
  ======
 
- Blast prints a summary every ten seconds. While blast is running, you can hit enter for an updated
+ Blitskrige prints a summary every ten seconds. While Blitskrige is running, you can hit enter for an updated
  summary, or enter a number to change the sending rate. Each time you change the rate a new column
  of metrics is created. If the worker returns a field named `status` in it's response, the values
  are summarised as rows.
@@ -65,23 +66,33 @@ statistical foundation able to provide extensive details on the performance of a
  Rate?
  ```
 
- Config
- ======
- Blast is configured by config file, command line flags or environment variables. The `--config` flag specifies the config file to load, and can be `json`, `yaml`, `toml` or anything else that [viper](https://github.com/spf13/viper) can read. If the config flag is omitted, blast searches for `blast-config.xxx` in the current directory, `$HOME/.config/blast/` and `/etc/blast/`.
-
- Environment variables and command line flags override config file options. Environment variables are upper case and prefixed with "BLAST" e.g. `BLAST_PAYLOAD_TEMPLATE`.
 
 
 Workers
 =======
 
-Worker is an interface that allows blast to easily be extended to support any protocol. See `main.go` for an example of how to build a command with your custom worker type.
+Worker is an interface that allows Blitskrige to support custom load testing strategies. 
 
-Starter and Stopper are interfaces a worker can optionally satisfy to provide initialization or finalization logic. See `httpworker` and `dummyworker` for simple examples. 
+
+```go
+type LalaWorker struct {}
+
+// Send satisfies the Worker interface.
+func (e *LalaWorker) Send(ctx context.Context,  lastWctx *WorkerContext) (*WorkerContext, error) {
+}
+
+// Start satisfies the Starter interface.
+func (e *LalaWorker) Start(ctx context.Context) (*WorkerContext, error) {
+}
+
+// Stop satisfies the Stopper interface.
+func (e *LalaWorker) Stop(ctx context.Context) error {
+}
+```
 
 Examples
 ========
-The blitskrige package may be used to start blast from code without using the command. Here's a some 
+The blitskrige package may be used to start Blitskrige from code without using the command. Here's a some 
 examples of usage:
 
 ```go
