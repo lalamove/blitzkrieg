@@ -3,6 +3,7 @@ package blast
 import (
 	"bytes"
 	"fmt"
+	"github.com/leemcloughlin/gofarmhash"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -47,6 +48,12 @@ type Status struct {
 	NinetyFifth time.Duration
 }
 
+type workDef struct {
+	segment int
+	data    map[string]string
+	hash    farmhash.Uint128
+}
+
 func (m *metricsDef) stats() Stats {
 	m.sync.RLock()
 	defer m.sync.RUnlock()
@@ -80,7 +87,7 @@ func (m *metricsDef) stats() Stats {
 
 	s.Skipped = m.skipped.Count()
 	s.ConcurrencyCurrent = int(m.busy.Count())
-	s.ConcurrencyMaximum = m.blaster.Workers
+	s.ConcurrencyMaximum = m.config.Workers
 	s.All.ActualRate = float64(m.all.total.start.Count()) / m.all.duration().Seconds()
 	s.All.AverageConcurrency = m.all.busy.Mean()
 	s.All.Duration = m.all.duration()

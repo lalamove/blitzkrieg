@@ -2,18 +2,19 @@ package blast
 
 import (
 	"context"
+	"fmt"
+	"github.com/francoispqt/gojay"
 	"io"
 	"os"
 	"os/signal"
 	"sync"
-	"errors"
 
 	"time"
 
 	"sync/atomic"
 
 	"github.com/leemcloughlin/gofarmhash"
-	"github.com/spf13/viper"
+	"github.com/pkg/errors"
 )
 
 // Set debug to true to print the number of active goroutines with every status.
@@ -29,61 +30,65 @@ var (
 	ErrWorkerFinished = errors.New("worker response already received")
 )
 
-// Blaster provides the back-end blast: a simple tool for API load testing and batch jobs. Use the New function to create a Blaster with default values.
-type Blaster struct {
-	// Quiet disables the status output.
-	Quiet bool
+// WorkerFunc defines a function type which generates a new Worker for running a load test.
+type WorkerFunc func() Worker
 
-	// Resume sets the resume option. See Config.Resume for more details.
-	Resume bool
 
-	// Rate sets the initial sending rate. Do not change this during a run - use the ChangeRate method instead. See Config.Resume for more details.
+// Config provides all the standard config options. Use the Initialise method to configure with a provided Config.
+type Config struct {
+	// WorkerFunc is responsible for generating workers for a load-test suite.
+	WorkerFunc WorkerFunc
+
+	// DefaultHeaders contains default headers that all workers must include
+	// in their requests.
+	//
+	// All header values are copied/appended into the initial content of a worker start
+	// WorkerContext, but it will append all header values into existing key
+	// found in the WorkerContext returned by the Worker.Start method call.
+	DefaultHeaders map[string][]string
+
+	// DefaultParams contains default params that all workers must include
+	// in their requests.
+	//
+	// All parameters are copied into the initial content of a worker start
+	// WorkerContext, but it will not replace any key already provided for
+	// if found in the WorkerContext returned by the Worker.Start method call.
+	DefaultParams map[string]string
+
+	// Log sets the filename of the log file to create / append to.
+	Log io.Writer
+
+	// Rate sets the initial rate in requests per second.
+	// (Default: 10 requests / second).
 	Rate float64
 
-	// Workers sets the number of workers. See Config.Workers for more details.
+	// Workers sets the number of concurrent workers. (Default: 10 workers).
 	Workers int
 
-	// LogData sets the data fields to be logged. See Config.LogData for more details.
-	LogData []string
+	// Timeout sets the deadline in the context passed to the worker. Workers must respect this the context cancellation.
+	// We exit with an error if any worker is processing for timeout + 1 second. (Default: 1 second).
+	Timeout time.Duration
+}
 
-	// LogOutput sets the output fields to be logged. See Config.LogOutput for more details.
-	LogOutput []string
-
-	// Headers sets the data headers. See Config.Headers for more details.
-	Headers []string
-
-	// PayloadVariants sets the payload variants. See Config.PayloadVariants for more details.
-	PayloadVariants []map[string]string
-
-	// WorkerVariants sets the worker variants. See Config.WorkerVariants for more details.
-	WorkerVariants []map[string]string
-
-	workerFunc func() Worker
-
-	viper *viper.Viper
+// Blaster provides the back-end blast: a simple tool for API load testing and batch jobs. Use the New function to create a Blaster with default values.
+type Blaster struct {
+	config *Config
 
 	softTimeout time.Duration
 	hardTimeout time.Duration
 	skip        map[farmhash.Uint128]struct{}
 
-	logWriter  csvWriteFlusher
+	logWriter  io.Writer
 	logCloser  io.Closer
 	outWriter  io.Writer
 	outCloser  io.Closer
-	dataReader csvReader
 	dataCloser io.Closer
 
-	inputReader io.Reader
-
 	cancel context.CancelFunc
-
-	payloadRenderer renderer
-	workerRenderer  renderer
 
 	mainChannel            chan int
 	errorChannel           chan error
 	workerChannel          chan workDef
-	logChannel             chan logRecord
 	dataFinishedChannel    chan struct{}
 	workersFinishedChannel chan struct{}
 	itemFinishedChannel    chan struct{}
@@ -93,94 +98,28 @@ type Blaster struct {
 	mainWait   *sync.WaitGroup
 	workerWait *sync.WaitGroup
 
-	workerTypes map[string]func() Worker
-
 	errorsIgnored uint64
 	metrics       *metricsDef
 	err           error
-	gcs           opener
 }
 
-// SetTimeout sets the timeout. See Config.Timeout for more details.
-func (b *Blaster) SetTimeout(timeout time.Duration) {
-	b.softTimeout = timeout
-	b.hardTimeout = timeout + time.Second
-}
-
-// SetWorker sets the worker creation function. See httpworker for a simple example.
-func (b *Blaster) SetWorker(wf func() Worker) {
-	b.workerFunc = wf
-}
-
-// SetPayloadTemplate sets the payload template. See Config.PayloadTemplate for more details.
-func (b *Blaster) SetPayloadTemplate(t map[string]interface{}) error {
-	var err error
-	if b.payloadRenderer, err = parseRenderer(t); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetWorkerTemplate sets the worker template. See Config.WorkerTemplate for more details.
-func (b *Blaster) SetWorkerTemplate(t map[string]interface{}) error {
-	var err error
-	if b.workerRenderer, err = parseRenderer(t); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetInput sets the rate adjustment reader, and allows testing rate adjustments. The Command method sets this to os.Stdin for interactive command line usage.
-func (b *Blaster) SetInput(r io.Reader) {
-	b.inputReader = r
-}
-
-// SetOutput sets the summary output writer, and allows the output to be redirected. The Command method sets this to os.Stdout for command line usage.
-func (b *Blaster) SetOutput(w io.Writer) {
-	if w == nil {
-		b.outWriter = nil
-		b.outCloser = nil
-		return
-	}
-	b.outWriter = newThreadSafeWriter(w)
-	if c, ok := w.(io.Closer); ok {
-		b.outCloser = c
-	} else {
-		b.outCloser = nil
-	}
-}
-
-// ChangeRate changes the sending rate during execution.
-func (b *Blaster) ChangeRate(rate float64) {
-	b.changeRateChannel <- rate
-}
 
 // New creates a new Blaster with defaults.
 func New(ctx context.Context, cancel context.CancelFunc) *Blaster {
-
 	b := &Blaster{
-		viper:                  viper.New(),
 		cancel:                 cancel,
 		mainWait:               new(sync.WaitGroup),
 		workerWait:             new(sync.WaitGroup),
-		workerTypes:            make(map[string]func() Worker),
 		skip:                   make(map[farmhash.Uint128]struct{}),
 		dataFinishedChannel:    make(chan struct{}),
 		workersFinishedChannel: make(chan struct{}),
 		changeRateChannel:      make(chan float64, 1),
 		errorChannel:           make(chan error),
-		logChannel:             make(chan logRecord),
 		mainChannel:            make(chan int),
 		workerChannel:          make(chan workDef),
-		Rate:                   10,
-		Workers:                10,
 		softTimeout:            time.Second,
 		hardTimeout:            time.Second * 2,
-		WorkerVariants:         []map[string]string{{}},
-		PayloadVariants:        []map[string]string{{}},
-		gcs:                    googleCloudOpener{},
 	}
-	b.metrics = newMetricsDef(b)
 
 	// trap Ctrl+C and call cancel on the context
 	b.signalChannel = make(chan os.Signal, 1)
@@ -199,9 +138,6 @@ func New(ctx context.Context, cancel context.CancelFunc) *Blaster {
 
 // Exit cancels any goroutines that are still processing, and closes all files.
 func (b *Blaster) Exit() {
-	if b.logWriter != nil {
-		b.logWriter.Flush()
-	}
 	if b.logCloser != nil {
 		_ = b.logCloser.Close() // ignore error
 	}
@@ -215,60 +151,14 @@ func (b *Blaster) Exit() {
 	b.cancel()
 }
 
-// Command processes command line flags, loads the config and starts the blast run.
-func (b *Blaster) Command(ctx context.Context) error {
-
-	// notest
-
-	c, err := b.LoadConfig()
-	if err != nil {
-		return err
-	}
-
-	if err := b.Initialise(ctx, c); err != nil {
-		return err
-	}
-
-	b.SetOutput(os.Stdout)
-
-	if !b.Quiet {
-		b.SetInput(os.Stdin)
-	}
-
-	_, err = b.Start(ctx)
-
-	return err
-}
-
 // Start starts the blast run without processing any config.
-func (b *Blaster) Start(ctx context.Context) (Stats, error) {
-
-	if b.dataReader == nil && b.Resume {
-		panic("In resume mode, data must be specified!")
+func (b *Blaster) Start(ctx context.Context, c Config) (Stats, error) {
+	if err := b.initialiseConfig(c); err != nil {
+		return Stats{}, err
 	}
-
-	if b.logWriter == nil && b.Resume {
-		panic("In resume mode, log must be specified!")
-	}
-
-	if b.logWriter == nil && (len(b.LogOutput) > 0 || len(b.LogData) > 0) {
-		panic("If log-output or log-data is specified, log file must be specified!")
-	}
-
-	if b.workerFunc == nil {
-		panic("Must specify worker-type!")
-	}
-
-	if b.Workers < 1 {
-		panic("Must specify workers!")
-	}
-
-	if b.Rate < 0 {
-		panic("Rate must not be negative!")
-	}
-
+	
+	b.metrics = newMetricsDef(b.config)
 	err := b.start(ctx)
-
 	return b.Stats(), err
 }
 
@@ -278,18 +168,12 @@ func (b *Blaster) Stats() Stats {
 }
 
 func (b *Blaster) start(ctx context.Context) error {
-
-	b.metrics.addSegment(b.Rate)
+	b.metrics.addSegment(b.config.Rate)
 
 	b.startTickerLoop(ctx)
 	b.startMainLoop(ctx)
 	b.startErrorLoop(ctx)
 	b.startWorkers(ctx)
-
-	b.startLogLoop(ctx)
-	b.startStatusLoop(ctx)
-	b.startRateLoop(ctx)
-	b.printRatePrompt()
 
 	// wait for cancel or finished
 	select {
@@ -318,123 +202,361 @@ func (b *Blaster) start(ctx context.Context) error {
 		return b.err
 	}
 	b.println("")
-	b.printStatus(true)
 	return nil
 }
 
-// RegisterWorkerType registers a new worker function that can be referenced in config file by the worker-type string field.
-func (b *Blaster) RegisterWorkerType(key string, workerFunc func() Worker) {
-	b.workerTypes[key] = workerFunc
-}
-
-// Payload is defines the content to be used for a giving request with it's headers
-// body and possible parameters depending on the underline protocol logic.
-type Payload struct{
-	Body []byte
-	Params map[string]string
-	Headers map[string][]string
-}
-
-// WorkerContext exists to define and contain the request body, headers and
-// response content, header and status for a giving request work done by
-// a worker. It also provides a means of providing response from a previous
-// request to a next request in a sequence or for the desire of alternating
-// the behaviour of the next worker based on the response from the last.
-type WorkerContext struct{
-	requestBody Payload
-	responseBody Payload
-
-	workerErr error
-	workerStatus string
-	finishedRequest bool
-	lastWorker *WorkerContext
-}
-
-// LastContext returns last request-request context for last execution
-// in a set sequence of request if any, else returning nil.
-func (w *WorkerContext) LastContext() *WorkerContext {
-	return w.lastWorker
-}
-
-// Error returns occured error for last executed worker.
-func (w *WorkerContext) Error() error {
-	return w.workerErr
-}
-
-// Request returns Payload for giving request context.
-func (w *WorkerContext) Request() Payload {
-	return w.requestBody
-}
-
-// Response returns Payload for giving response, this is only ever available
-// to the next sequence once the current has completed it's run in a
-// set of sequence request.
-func (w *WorkerContext) Response() (Payload, error) {
-	if w.finishedRequest {
-		return w.responseBody, nil
+// initialiseConfig configures the Blaster with config options in a provided Config.
+func (b *Blaster) initialiseConfig(c Config) error {
+	if c.Rate <= 0 {
+		c.Rate = 10
 	}
-	return w.responseBody, ErrWorkerNotFinished
-}
 
-// SetStatus sets the status code
-func (w *WorkerContext) SetStatus(code string) error {
-	if w.finishedRequest {
-		return ErrWorkerFinished
+	if c.Workers <= 0 {
+		c.Workers = 10
 	}
-	
-	w.workerStatus = code
+
+	if c.Timeout <= 0 {
+		c.Timeout = time.Second * 1
+	}
+
+	b.config = &c
 	return nil
 }
 
-// SetResponseBody sets the response body for a worker context if worker context has not already
-// be finalized.
-func (w *WorkerContext) SetResponseBody(b []byte) error {
-	if w.finishedRequest {
-		return ErrWorkerFinished
+// SetTimeout sets the timeout. See Config.Timeout for more details.
+func (b *Blaster) SetTimeout(timeout time.Duration) {
+	b.softTimeout = timeout
+	b.hardTimeout = timeout + time.Second
+}
+
+// SetWorker sets the worker creation function. See httpworker for a simple example.
+func (b *Blaster) SetWorker(wf func() Worker) {
+	b.config.WorkerFunc = wf
+}
+
+// SetOutput sets the summary output writer, and allows the output to be redirected. The Command method sets this to os.Stdout for command line usage.
+func (b *Blaster) SetOutput(w io.Writer) {
+	if w == nil {
+		b.outWriter = nil
+		b.outCloser = nil
+		return
+	}
+	b.outWriter = newThreadSafeWriter(w)
+	if c, ok := w.(io.Closer); ok {
+		b.outCloser = c
+	} else {
+		b.outCloser = nil
+	}
+}
+
+// ChangeRate changes the sending rate during execution.
+func (b *Blaster) ChangeRate(rate float64) {
+	b.changeRateChannel <- rate
+}
+
+func (b *Blaster) startErrorLoop(ctx context.Context) {
+	b.mainWait.Add(1)
+
+	go func() {
+		defer b.mainWait.Done()
+		defer b.println("Exiting error loop")
+		for {
+			select {
+			// don't react to ctx.Done() here because we may need to wait until workers have finished
+			case <-b.workersFinishedChannel:
+				// exit gracefully
+				return
+			case err := <-b.errorChannel:
+				b.println("Exiting with fatal error...")
+				b.err = err
+				b.cancel()
+				return
+			}
+		}
+	}()
+}
+
+func (b *Blaster) error(err error) {
+	select {
+	case b.errorChannel <- err:
+	default:
+		// don't send to error channel if errorChannel isn't listening
+		atomic.AddUint64(&b.errorsIgnored, 1)
+	}
+}
+
+func (b *Blaster) startMainLoop(ctx context.Context) {
+	b.mainWait.Add(1)
+
+	go func() {
+		defer b.mainWait.Done()
+		defer b.println("Exiting main loop")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-b.dataFinishedChannel:
+				// If dataFinishedChannel is closed externally (e.g. in tests), we should return.
+				return
+			case segment := <-b.mainChannel:
+				b.workerChannel <- workDef{segment: segment}
+			}
+		}
+	}()
+}
+
+
+//********************************************************************
+// println
+//********************************************************************
+
+func (b *Blaster) println(a ...interface{}) {
+	if b.outWriter == nil {
+		return
+	}
+	fmt.Fprintln(b.outWriter, a...)
+}
+
+func (b *Blaster) printf(format string, a ...interface{}) {
+	if b.outWriter == nil {
+		return
+	}
+	fmt.Fprintf(b.outWriter, format, a...)
+}
+
+//********************************************************************
+// Worker Loop
+//********************************************************************
+
+
+func (b *Blaster) startWorkers(ctx context.Context) {
+	for i := 0; i < b.config.Workers; i++ {
+
+		w := b.config.WorkerFunc()
+
+		var newWorkContext  *WorkerContext
+
+		if s, ok := w.(Starter); ok {
+			var moddedContext, err = s.Start(ctx)
+			if err != nil {
+				// notest
+				b.error(errors.WithStack(err))
+				return
+			}
+
+			if moddedContext == nil {
+				b.error(errors.New("Worker.Start returned nil WorkerContext"))
+			}
+
+			newWorkContext = moddedContext
+		}else{
+			newWorkContext = WorkerContextWithoutPayload()
+		}
+
+		// Copy parameters...
+		for key, param := range b.config.DefaultParams {
+			if _, ok := newWorkContext.requestBody.Params[key]; !ok {
+				newWorkContext.requestBody.Params[key] = param
+			}
+		}
+
+		// Copy headers
+		for key, header := range b.config.DefaultHeaders {
+				newWorkContext.requestBody.Headers[key] = append(newWorkContext.requestBody.Headers[key], header...)
+		}
+
+		b.workerWait.Add(1)
+		go func(index int) {
+			defer b.workerWait.Done()
+			defer func() {
+				if s, ok := w.(Stopper); ok {
+					if err := s.Stop(ctx); err != nil {
+						// notest
+						b.error(errors.WithStack(err))
+						return
+					}
+				}
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-b.dataFinishedChannel:
+					// exit gracefully
+					return
+				case work := <-b.workerChannel:
+					if err := b.send(ctx, w, newWorkContext, work); err != nil {
+						// notest
+						b.error(err)
+						return
+					}
+					if b.itemFinishedChannel != nil {
+						// only used in tests
+						b.itemFinishedChannel <- struct{}{}
+					}
+				}
+			}
+		}(i)
+	}
+}
+
+func (b *Blaster) send(ctx context.Context, w Worker, wctx *WorkerContext , work workDef) error {
+	b.metrics.logStart(work.segment)
+	b.metrics.logBusy(work.segment)
+	b.metrics.busy.Inc(1)
+	defer b.metrics.busy.Dec(1)
+
+	// Record the start time
+	start := time.Now()
+
+	// Create a child context with the selected timeout
+	child, cancel := context.WithTimeout(ctx, b.softTimeout)
+	defer cancel()
+
+	finished := make(chan *WorkerContext)
+
+	success := true
+
+	go func() {
+		endingCtx, err := w.Send(child, wctx)
+		if err != nil {
+			success = false
+
+			// if the endingCtx.workerErr is not set, set to returned error.
+			if endingCtx.workerErr == nil {
+				endingCtx.workerErr = err
+			}
+		}
+		finished <- endingCtx
+	}()
+
+	var endCtx *WorkerContext
+	var hardTimeoutExceeded bool
+	select {
+	case <-finished:
+		// When Send finishes successfully, cancel the child context.
+		cancel()
+	case <-ctx.Done():
+		// In the event of the main context being cancelled, cancel the child context and wait for
+		// the sending goroutine to exit.
+		cancel()
+		select {
+		case endCtx = <-finished: // notest
+			// Only continue when finished channel is closed - e.g. sending goroutine has exited.
+		case <-time.After(b.hardTimeout):
+			hardTimeoutExceeded = true
+			endCtx = wctx
+		}
+	case <-time.After(b.hardTimeout):
+		hardTimeoutExceeded = true
 	}
 
-	w.responseBody.Body = b
+	if hardTimeoutExceeded {
+		// If we get here then the worker is not respecting the context cancellation deadline, and
+		// we should exit with an error. We don't simply log this as an unsuccessful request
+		// because the sending goroutine is still running and would crete a memory leak.
+		b.error(errors.New("a worker was still sending after timeout + 1 second. This indicates a bug in the worker code. Workers should immediately exit on receiving a signal from ctx.Done()"))
+		return nil
+	}
+
+	b.metrics.logFinish(work.segment, endCtx.workerStatus, time.Since(start), success)
+
+	if b.logWriter != nil {
+		encoder := gojay.BorrowEncoder(b.config.Log)
+		endCtx.MarshalJSONObject(encoder)
+	}
 	return nil
 }
 
-// SetResponseHeader sets the response header map for a worker context if worker context has not already
-// be finalized.
-func (w *WorkerContext) SetResponseHeader(h map[string][]string) error {
-	if w.finishedRequest {
-		return ErrWorkerFinished
+//********************************************************************
+// Ticker Loop
+//********************************************************************
+
+func (b *Blaster) startTickerLoop(ctx context.Context) {
+
+	b.mainWait.Add(1)
+
+	var ticker *time.Ticker
+
+	updateTicker := func() {
+		if b.config.Rate == 0 {
+			ticker = &time.Ticker{} // empty *time.Ticker will have nil C, so block forever.
+			return
+		}
+
+		ticksPerSecond := b.config.Rate
+		ticksPerMs := ticksPerSecond / 1000.0
+		ticksPerUs := ticksPerMs / 1000.0
+		ticksPerNs := ticksPerUs / 1000.0
+		nsPerTick := 1.0 / ticksPerNs
+
+		ticker = time.NewTicker(time.Nanosecond * time.Duration(nsPerTick))
 	}
 
-	w.responseBody.Headers = h
-	return nil
-}
-
-// SetWorkerError sets the worker error if not finalized and should be used when worker instance
-// finished with a error.
-func (w *WorkerContext) SetWorkerError(err error) error {
-	if w.finishedRequest {
-		return ErrWorkerFinished
+	changeRate := func(rate float64) {
+		b.config.Rate = rate
+		if ticker != nil {
+			ticker.Stop()
+		}
+		b.metrics.addSegment(b.config.Rate)
+		updateTicker()
 	}
 
-	w.workerErr = err
-	return nil
+	updateTicker()
+
+	go func() {
+		defer b.mainWait.Done()
+		defer b.println("Exiting ticker loop")
+		defer func() {
+			if ticker != nil {
+				ticker.Stop()
+			}
+		}()
+		for {
+
+			// First wait for a tick... but we should also wait for an exit signal, data finished
+			// signal or rate change command (we could be waiting forever on rate = 0).
+			select {
+			case <-ticker.C:
+				// continue
+			case <-ctx.Done():
+				return
+			case <-b.dataFinishedChannel:
+				return
+			case rate := <-b.changeRateChannel:
+				// Restart the for loop after a rate change. If rate == 0, we may not want to send
+				// any more.
+				changeRate(rate)
+				continue
+			}
+
+			segment := b.metrics.currentSegment()
+
+			// Next send on the main channel. The channel won't have a listener if there is no idle
+			// worker. In this case we should continue and log a miss.
+			select {
+			case b.mainChannel <- segment:
+				// if main loop is waiting, send it a message
+			case <-ctx.Done():
+				// notest
+				return
+			case <-b.dataFinishedChannel:
+				// notest
+				return
+			default:
+				// notest
+				// if main loop is busy, skip this tick
+				continue
+			}
+		}
+	}()
 }
 
-// Worker is an interface that allows blast to easily be extended to support any protocol. See `main.go` for
-// an example of how to build a command with your custom worker type.
-type Worker interface {
-	Send(ctx context.Context, workerCtx WorkerContext) error
-}
 
-// Starter is an interfaces a worker can optionally satisfy to provide initialization
-// logic.
-type Starter interface {
-	Start(ctx context.Context, payload Payload, lastCtx WorkerContext) (WorkerContext, error)
-}
-
-// Stopper is an interface a worker can optionally satisfy to provide finalization logic.
-type Stopper interface {
-	Stop(ctx context.Context, workerCtx WorkerContext) error
-}
+//********************************************************************
+// threadSafeWriter
+//********************************************************************
 
 func newThreadSafeWriter(w io.Writer) *threadSafeWriter {
 	return &threadSafeWriter{
@@ -454,11 +576,3 @@ func (t *threadSafeWriter) Write(p []byte) (n int, err error) {
 	return t.w.Write(p)
 }
 
-type csvReader interface {
-	Read() (record []string, err error)
-}
-
-type csvWriteFlusher interface {
-	Write(record []string) error
-	Flush()
-}

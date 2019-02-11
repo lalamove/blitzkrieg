@@ -15,16 +15,16 @@ type metricsDef struct {
 	busy     metrics.Counter
 	all      *metricsSegment
 	segments []*metricsSegment
-	blaster  *Blaster
+	config  *Config
 }
 
-func newMetricsDef(b *Blaster) *metricsDef {
+func newMetricsDef(c *Config) *metricsDef {
 	r := metrics.NewRegistry()
 	m := &metricsDef{
 		registry: r,
 		busy:     metrics.NewRegisteredCounter("busy", r),
 		skipped:  metrics.NewRegisteredCounter("skipped", r),
-		blaster:  b,
+		config:  c,
 	}
 	m.all = m.newMetricsSegment(0)
 	return m

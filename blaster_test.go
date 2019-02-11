@@ -70,8 +70,6 @@ func TestPrintStatus(t *testing.T) {
 	b.mainChannel <- 0
 	<-b.itemFinishedChannel
 
-	b.printStatus(false)
-
 	// another tick and the data will reach EOF, and gracefully exit
 	b.mainChannel <- 0
 
