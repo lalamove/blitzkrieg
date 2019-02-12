@@ -249,6 +249,32 @@ func (b *Blaster) SetOutput(w io.Writer) {
 	}
 }
 
+//********************************************************************
+// threadSafeWriter
+//********************************************************************
+
+func newThreadSafeWriter(w io.Writer) *threadSafeWriter {
+	return &threadSafeWriter{
+		w: w,
+	}
+}
+
+type threadSafeWriter struct {
+	w io.Writer
+	m sync.Mutex
+}
+
+// Write writes to the underlying writer in a thread safe manner.
+func (t *threadSafeWriter) Write(p []byte) (n int, err error) {
+	t.m.Lock()
+	defer t.m.Unlock()
+	return t.w.Write(p)
+}
+
+//********************************************************************
+// Rate Changing
+//********************************************************************
+
 // ChangeRate changes the sending rate during execution.
 func (b *Blaster) ChangeRate(rate float64) {
 	b.changeRateChannel <- rate
@@ -334,35 +360,11 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 
 		w := b.config.WorkerFunc()
 
-		var newWorkContext  *WorkerContext
-
-		if s, ok := w.(Starter); ok {
-			var moddedContext, err = s.Start(ctx)
-			if err != nil {
-				// notest
+		if starter, ok := w.(Starter); ok {
+			if err := starter.Start(ctx); err != nil {
 				b.error(errors.WithStack(err))
 				return
 			}
-
-			if moddedContext == nil {
-				b.error(errors.New("Worker.Start returned nil WorkerContext"))
-			}
-
-			newWorkContext = moddedContext
-		}else{
-			newWorkContext = WorkerContextWithoutPayload()
-		}
-
-		// Copy parameters...
-		for key, param := range b.config.DefaultParams {
-			if _, ok := newWorkContext.requestBody.Params[key]; !ok {
-				newWorkContext.requestBody.Params[key] = param
-			}
-		}
-
-		// Copy headers
-		for key, header := range b.config.DefaultHeaders {
-				newWorkContext.requestBody.Headers[key] = append(newWorkContext.requestBody.Headers[key], header...)
 		}
 
 		b.workerWait.Add(1)
@@ -386,7 +388,7 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 					// exit gracefully
 					return
 				case work := <-b.workerChannel:
-					if err := b.send(ctx, w, newWorkContext, work); err != nil {
+					if err := b.send(ctx, w,  work); err != nil {
 						// notest
 						b.error(err)
 						return
@@ -401,37 +403,56 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 	}
 }
 
-func (b *Blaster) send(ctx context.Context, w Worker, wctx *WorkerContext , work workDef) error {
+func (b *Blaster) send(ctx context.Context, w Worker, work workDef) error {
 	b.metrics.logStart(work.segment)
 	b.metrics.logBusy(work.segment)
 	b.metrics.busy.Inc(1)
 	defer b.metrics.busy.Dec(1)
 
+	var newWorkContext, err = w.Prepare(ctx)
+	if err != nil {
+		b.error(errors.WithStack(err))
+		return err
+	}
+
+	if newWorkContext == nil {
+		b.error(errors.New("Worker.Start returned nil WorkerContext"))
+		return err
+	}
+
+	// Copy parameters...
+	for key, param := range b.config.DefaultParams {
+		if _, ok := newWorkContext.requestBody.Params[key]; !ok {
+			newWorkContext.requestBody.Params[key] = param
+		}
+	}
+
+	// Copy headers
+	for key, header := range b.config.DefaultHeaders {
+		newWorkContext.requestBody.Headers[key] = append(newWorkContext.requestBody.Headers[key], header...)
+	}
+
+	newWorkContext.segment = work.segment
+
 	// Record the start time
-	start := time.Now()
+	newWorkContext.sendStart = time.Now()
 
 	// Create a child context with the selected timeout
 	child, cancel := context.WithTimeout(ctx, b.softTimeout)
 	defer cancel()
 
-	finished := make(chan *WorkerContext)
+	finished := make(chan struct{})
 
-	success := true
 
 	go func() {
-		endingCtx, err := w.Send(child, wctx)
-		if err != nil {
-			success = false
-
-			// if the endingCtx.workerErr is not set, set to returned error.
-			if endingCtx.workerErr == nil {
-				endingCtx.workerErr = err
+		if err := w.Send(child, newWorkContext); err != nil {
+			if newWorkContext.workerErr== nil {
+				newWorkContext.workerErr = err
 			}
 		}
-		finished <- endingCtx
+		close(finished)
 	}()
 
-	var endCtx *WorkerContext
 	var hardTimeoutExceeded bool
 	select {
 	case <-finished:
@@ -442,11 +463,10 @@ func (b *Blaster) send(ctx context.Context, w Worker, wctx *WorkerContext , work
 		// the sending goroutine to exit.
 		cancel()
 		select {
-		case endCtx = <-finished: // notest
+		case <-finished: // notest
 			// Only continue when finished channel is closed - e.g. sending goroutine has exited.
 		case <-time.After(b.hardTimeout):
 			hardTimeoutExceeded = true
-			endCtx = wctx
 		}
 	case <-time.After(b.hardTimeout):
 		hardTimeoutExceeded = true
@@ -460,13 +480,20 @@ func (b *Blaster) send(ctx context.Context, w Worker, wctx *WorkerContext , work
 		return nil
 	}
 
-	b.metrics.logFinish(work.segment, endCtx.workerStatus, time.Since(start), success)
+	//b.metrics.logFinish(work.segment, newWorkContext.Status(), time.Since(start), success)
+
+	newWorkContext.buildMetric(nil, b.metrics)
+
 
 	if b.logWriter != nil {
 		encoder := gojay.BorrowEncoder(b.config.Log)
-		endCtx.MarshalJSONObject(encoder)
+		newWorkContext.MarshalJSONObject(encoder)
 	}
 	return nil
+}
+
+type workDef struct {
+	segment int
 }
 
 //********************************************************************
@@ -554,25 +581,4 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 }
 
 
-//********************************************************************
-// threadSafeWriter
-//********************************************************************
-
-func newThreadSafeWriter(w io.Writer) *threadSafeWriter {
-	return &threadSafeWriter{
-		w: w,
-	}
-}
-
-type threadSafeWriter struct {
-	w io.Writer
-	m sync.Mutex
-}
-
-// Write writes to the underlying writer in a thread safe manner.
-func (t *threadSafeWriter) Write(p []byte) (n int, err error) {
-	t.m.Lock()
-	defer t.m.Unlock()
-	return t.w.Write(p)
-}
 

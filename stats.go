@@ -3,7 +3,6 @@ package blast
 import (
 	"bytes"
 	"fmt"
-	"github.com/leemcloughlin/gofarmhash"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -48,11 +47,6 @@ type Status struct {
 	NinetyFifth time.Duration
 }
 
-type workDef struct {
-	segment int
-	data    map[string]string
-	hash    farmhash.Uint128
-}
 
 func (m *metricsDef) stats() Stats {
 	m.sync.RLock()

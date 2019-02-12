@@ -16,6 +16,8 @@ type metricsDef struct {
 	all      *metricsSegment
 	segments []*metricsSegment
 	config  *Config
+
+	sections map[string]*metricsSegment
 }
 
 func newMetricsDef(c *Config) *metricsDef {
@@ -54,6 +56,20 @@ func (m *metricsDef) logStart(segment int) {
 	m.segments[segment].logStart()
 }
 
+func (m *metricsDef) logSection(section string, update func(*metricsSegment, *metricsDef)) {
+	m.sync.Lock()
+	defer m.sync.Unlock()
+
+	if sectiond, ok := m.sections[section]; ok {
+		update(sectiond, m)
+		return
+	}
+
+	newSection := m.newSubMetrics(section)
+	update(newSection, m)
+	m.sections[section] = newSection
+}
+
 func (m *metricsDef) logFinish(segment int, status string, elapsed time.Duration, success bool) {
 	m.sync.Lock()
 	defer m.sync.Unlock()
@@ -78,6 +94,12 @@ func (m *metricsDef) newMetricsItem() *metricsItem {
 		success: metrics.NewRegisteredCounter("success", m.registry),
 		fail:    metrics.NewRegisteredCounter("fail", m.registry),
 	}
+}
+
+func (m *metricsDef) newSubMetrics(section string) *metricsSegment {
+	var seg = m.newMetricsSegment(m.config.Rate)
+	m.sections[section] = seg
+	return seg
 }
 
 func (m *metricsDef) newMetricsSegment(rate float64) *metricsSegment {

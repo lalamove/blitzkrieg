@@ -2,10 +2,10 @@ package blast
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/francoispqt/gojay"
-
-	"encoding/json"
+	"time"
 )
 
 // Stringify returns a giving value as a string.
@@ -27,30 +27,81 @@ func Stringify(v interface{}) string {
 
 // Worker is an interface that allows blast to easily be extended to support any protocol.
 // A worker receives a WorkerContext which holds underline data about a request to be made
-// and a possible response, you are allowed to return the same or a new WorkerContext for
-// the purpose of presenting a connected set of multiple WorkerContext when your worker
-// is a combination of multiple requests which are part of a whole.
+// and can be provided with details for it's response.
 //
-// This allows workers which are created once but called repeatedly to process requests
-// concurrently to house the whole behaviour for the load test without complexity
-// loaded into this library itself, so you can flexibly create a worker which is a
-// sequence of request but still be able to provide base detail when a worker is done.
+// The WorkerContext provides the WorkerContext.FromContext which creates a parent-child chain
+// for a context, this allows a single worker to make multiple request each with a unique title
+// that the parent will collect, this tree will be followed to generate a complete view and
+// metric information on the whole and individual requests for the worker.
+//
+// By using this architecture we allow workers which are created once but called
+// repeatedly to process requests concurrently and house different internal behaviours or
+// sub calls which we can equally measure without much complexity in the library itself.
 type Worker interface {
-	Send(ctx context.Context, workerCtx *WorkerContext) (*WorkerContext, error)
+	// Prepare handles the loading of the initial data a worker should begin with, it is
+	// responsible for creating what data a request should be or contain.
+	Prepare(ctx context.Context) (*WorkerContext, error)
+
+	// Send handles the internal request/requests we wish to make for to our target.
+	//
+	// You only make request for a single or set of requests for just one call to your
+	// service target. Blitzkrieg handles concurrent hits to your target by calling
+	// multiple versions of your worker.
+	Send(ctx context.Context, workerCtx *WorkerContext)  error
 }
 
-// Starter is an interfaces a worker can optionally satisfy to provide initialization
-// logic.
-//
-// The starter handles the loading of the initial data a worker should begin with, it is
-// responsible for creating what data a request should be or contain.
+// Starter is an interface a worker can optionally satisfy to provide initialization logic.
 type Starter interface {
-	Start(ctx context.Context) (*WorkerContext, error)
+	Start(ctx context.Context) error
 }
 
 // Stopper is an interface a worker can optionally satisfy to provide finalization logic.
 type Stopper interface {
 	Stop(ctx context.Context) error
+}
+
+//********************************************************************
+// FunctionWorker
+//********************************************************************
+
+// FunctionWorker facilitates code examples by satisfying the Worker, Starter and Stopper interfaces with provided functions.
+type FunctionWorker struct {
+	StopFunc  func(ctx context.Context) error
+	StartFunc func(ctx context.Context) error
+	PrepareFunc func(ctx context.Context) (*WorkerContext, error)
+	SendFunc  func(ctx context.Context,  lastWctx *WorkerContext) error
+}
+
+// Send satisfies the Worker interface.
+func (e *FunctionWorker) Send(ctx context.Context,  lastWctx *WorkerContext)  error {
+	if e.SendFunc == nil {
+		return  nil
+	}
+	return e.SendFunc(ctx, lastWctx)
+}
+
+// Prepare satisfies the Worker interface.
+func (e *FunctionWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
+	if e.PrepareFunc == nil {
+		return WorkerContextWithoutPayload(nil), nil
+	}
+	return e.PrepareFunc(ctx)
+}
+
+// Start satisfies the Starter interface.
+func (e *FunctionWorker) Start(ctx context.Context) error {
+	if e.StartFunc == nil {
+		return  nil
+	}
+	return e.StartFunc(ctx)
+}
+
+// Stop satisfies the Stopper interface.
+func (e *FunctionWorker) Stop(ctx context.Context) error {
+	if e.StopFunc == nil {
+		return nil
+	}
+	return e.StopFunc(ctx)
 }
 
 //********************************************************************
@@ -125,50 +176,70 @@ func (p headersEncodable) MarshalJSONObject(enc *gojay.Encoder) {
 // request to a next request in a sequence or for the desire of alternating
 // the behaviour of the next worker based on the response from the last.
 //
-// WorkerContext are not safe for concurrent writes by multiple go-routines.
-// But can be accessed within multiple go-routines.
+// WorkerContext is not safe for concurrent use by multiple go-routines, nor is it
+// intended to be.
 type WorkerContext struct{
+	segment int
 	target string
+	segmentID string
+	meta interface{}
+	end time.Time
+	start time.Time
+	sendStart time.Time
 	requestBody Payload
-	lastWorker *WorkerContext
 
 	workerErr error
 	workerStatus string
 	responseBody Payload
 	finishedRequest bool
+
+	parent *WorkerContext
+	children []WorkerContext
 }
 
 // NewWorkerContext returns a new WorkerContext which has no previous context.
-func NewWorkerContext(target string, req Payload) *WorkerContext {
-	return requestWorkerContext(target, req, nil)
+// Arguments:
+//	 - meta: This is any meta type you wish to be attached to your WorkerContext
+//          like a Config for the target information.
+func NewWorkerContext(target string, req Payload, meta interface{}) *WorkerContext {
+	return requestWorkerContext(target, req, meta, nil)
 }
 
 // WorkerContextWithoutPayload returns a new WorkerContext with a default empty
 // payload.
-func WorkerContextWithoutPayload() *WorkerContext {
-	return requestWorkerContext("", Payload{}, nil)
-}
-
-// requestWorkerContext returns a new WorkerContext which has giving request
-// payload and last context for use.
-func requestWorkerContext(target string, req Payload, last *WorkerContext) *WorkerContext {
-	return &WorkerContext{
-		target: target,
-		requestBody: req,
-		lastWorker: last,
-	}
+func WorkerContextWithoutPayload(meta interface{}) *WorkerContext {
+	return requestWorkerContext("", Payload{}, meta, nil)
 }
 
 // FromContext returns a new WorkerContext which is based of this worker
 // context, connecting this as it's previous context.
-func (w *WorkerContext) FromContext(target string, nextReq Payload) *WorkerContext {
-	return requestWorkerContext(target, nextReq, w)
+func (w *WorkerContext) FromContext(target string, nextReq Payload, meta interface{}) *WorkerContext {
+	return requestWorkerContext(target, nextReq, meta, w)
 }
 
-// LastContext returns last request-request context for last execution
-// in a set sequence of request if any, else returning nil.
+// requestWorkerContext returns a new WorkerContext which has giving request
+// payload and last context for use.
+func requestWorkerContext(target string, req Payload,meta interface{}, last *WorkerContext) *WorkerContext {
+	var w WorkerContext
+	w.meta = meta
+	w.parent = last
+	w.target = target
+	w.segmentID = target
+	w.requestBody = req
+	w.start = time.Now()
+	
+	if last != nil {
+		w.segmentID = fmt.Sprint("%s/%s", last.segmentID, target)
+		last.children = append(last.children, w)
+		w.segment = last.segment
+	}
+	return &w
+}
+
+// ParentContext returns parent worker context from where it
+// is derived from. A root WorkerContext never has a parent.
 func (w *WorkerContext) LastContext() *WorkerContext {
-	return w.lastWorker
+	return w.parent
 }
 
 // Error returns occured error for last executed worker.
@@ -179,6 +250,11 @@ func (w *WorkerContext) Error() error {
 // Request returns Payload for giving request context.
 func (w *WorkerContext) Request() Payload {
 	return w.requestBody
+}
+
+// Meta returns attached Meta if any for giving request context.
+func (w *WorkerContext) Meta() interface{} {
+	return w.meta
 }
 
 // IsFinished returns true/false if giving context is finished and
@@ -193,9 +269,32 @@ func (w *WorkerContext) Status() string {
 	return w.workerStatus
 }
 
+// Elapsed returns the total duration taking from the creation of a context
+// till the call to it's method SetResponse().
+func (w *WorkerContext) Elapsed() time.Duration {
+	return w.end.Sub(w.start)
+}
+
+// Since returns the total duration taking from the passed in time of a context
+// till the call to it's method SetResponse().
+func (w *WorkerContext) Since(from time.Time) time.Duration {
+	return from.Sub(w.end)
+}
+
 // IsNil implements gojay.MarshalJSONObject interface method.
 func (w *WorkerContext) IsNil() bool {
 	return false
+}
+
+func (w *WorkerContext) buildMetric(section *metricsSegment, root *metricsDef)  {
+	// if this is the root then log finish and details.
+	if section == nil {
+		root.logFinish(w.segment, w.workerStatus, time.Since(w.sendStart), w.workerErr == nil)
+	}
+	
+	for _, child := range w.children {
+		root.logSection(child.segmentID, child.buildMetric)
+	}
 }
 
 // MarshalJSONObject implements gojay.MarshalJSONObject interface method.
@@ -233,6 +332,7 @@ func (w *WorkerContext) SetResponse(status string, payload Payload, err error) e
 	}
 
 	w.workerErr = err
+	w.end = time.Now()
 	w.workerStatus = status
 	w.responseBody = payload
 	w.finishedRequest = true
@@ -240,37 +340,3 @@ func (w *WorkerContext) SetResponse(status string, payload Payload, err error) e
 }
 
 
-//********************************************************************
-// FunctionWorker
-//********************************************************************
-
-// FunctionWorker facilitates code examples by satisfying the Worker, Starter and Stopper interfaces with provided functions.
-type FunctionWorker struct {
-	StopFunc  func(ctx context.Context) error
-	StartFunc func(ctx context.Context) (*WorkerContext, error)
-	SendFunc  func(ctx context.Context,  lastWctx *WorkerContext) (*WorkerContext, error)
-}
-
-// Send satisfies the Worker interface.
-func (e *FunctionWorker) Send(ctx context.Context,  lastWctx *WorkerContext) (*WorkerContext, error) {
-	if e.SendFunc == nil {
-		return lastWctx, nil
-	}
-	return e.SendFunc(ctx, lastWctx)
-}
-
-// Start satisfies the Starter interface.
-func (e *FunctionWorker) Start(ctx context.Context) (*WorkerContext, error) {
-	if e.StartFunc == nil {
-		return WorkerContextWithoutPayload(), nil
-	}
-	return e.StartFunc(ctx)
-}
-
-// Stop satisfies the Stopper interface.
-func (e *FunctionWorker) Stop(ctx context.Context) error {
-	if e.StopFunc == nil {
-		return nil
-	}
-	return e.StopFunc(ctx)
-}
