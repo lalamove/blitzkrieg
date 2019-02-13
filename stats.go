@@ -1,4 +1,4 @@
-package blast
+package blitzkrieg
 
 import (
 	"bytes"
@@ -46,7 +46,6 @@ type Status struct {
 	Mean        time.Duration
 	NinetyFifth time.Duration
 }
-
 
 func (m *metricsDef) stats() Stats {
 	m.sync.RLock()

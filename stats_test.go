@@ -1,4 +1,4 @@
-package blast
+package blitzkrieg
 
 import (
 	"testing"

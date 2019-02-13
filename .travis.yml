@@ -1,10 +1,6 @@
 language: go
 go:
     - 1.x
-notificaitons:
-  email:
-    recipients: dave@brophy.uk
-    on_failure: always
 install:
   - go get -u github.com/dave/courtney
   - go get -t -v ./...

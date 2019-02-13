@@ -1,10 +1,10 @@
-package blast
+package blitzkrieg
 
 import (
 	"sync"
 	"time"
 
-	"github.com/rcrowley/go-metrics"
+	metrics "github.com/rcrowley/go-metrics"
 )
 
 type metricsDef struct {
@@ -15,20 +15,21 @@ type metricsDef struct {
 	busy     metrics.Counter
 	all      *metricsSegment
 	segments []*metricsSegment
-	config  *Config
+	config   *Config
 
-	sections map[string]*metricsSegment
+	sections map[string]childSegment
 }
 
-func newMetricsDef(c *Config) *metricsDef {
+func newMetricsDef(c *Config, hit HitSegment) *metricsDef {
 	r := metrics.NewRegistry()
 	m := &metricsDef{
 		registry: r,
+		sections: map[string]childSegment{},
 		busy:     metrics.NewRegisteredCounter("busy", r),
 		skipped:  metrics.NewRegisteredCounter("skipped", r),
-		config:  c,
+		config:   c,
 	}
-	m.all = m.newMetricsSegment(0)
+	m.all = m.newMetricsSegment(hit)
 	return m
 }
 
@@ -56,18 +57,17 @@ func (m *metricsDef) logStart(segment int) {
 	m.segments[segment].logStart()
 }
 
-func (m *metricsDef) logSection(section string, update func(*metricsSegment, *metricsDef)) {
+func (m *metricsDef) logSection(rate float64, section string, segment int, hit HitSegment, update func(*metricsSegment, *metricsDef)) {
 	m.sync.Lock()
 	defer m.sync.Unlock()
 
-	if sectiond, ok := m.sections[section]; ok {
-		update(sectiond, m)
+	if child, ok := m.sections[section]; ok {
+		update(child.getSegment(segment), m)
 		return
 	}
 
-	newSection := m.newSubMetrics(section)
-	update(newSection, m)
-	m.sections[section] = newSection
+	child := m.newSubMetrics(section, segment, hit)
+	update(child.getSegment(segment), m)
 }
 
 func (m *metricsDef) logFinish(segment int, status string, elapsed time.Duration, success bool) {
@@ -77,7 +77,7 @@ func (m *metricsDef) logFinish(segment int, status string, elapsed time.Duration
 	m.segments[segment].logFinish(status, elapsed, success)
 }
 
-func (m *metricsDef) addSegment(rate float64) {
+func (m *metricsDef) addSegment(rate HitSegment) {
 	m.sync.Lock()
 	defer m.sync.Unlock()
 	if len(m.segments) > 0 {
@@ -96,16 +96,44 @@ func (m *metricsDef) newMetricsItem() *metricsItem {
 	}
 }
 
-func (m *metricsDef) newSubMetrics(section string) *metricsSegment {
-	var seg = m.newMetricsSegment(m.config.Rate)
-	m.sections[section] = seg
-	return seg
+func (m *metricsDef) newSubMetrics(section string, segment int, hit HitSegment) *childSegment {
+	child := childSegment{
+		root:     m,
+		key:      section,
+		segments: map[int]*metricsSegment{},
+	}
+
+	child.addSegment(segment, hit)
+	m.sections[section] = child
+	return &child
 }
 
-func (m *metricsDef) newMetricsSegment(rate float64) *metricsSegment {
+type childSegment struct {
+	root     *metricsDef
+	segments map[int]*metricsSegment
+	key      string
+}
+
+func (c *childSegment) addSegment(segment int, hit HitSegment) {
+	if _, ok := c.segments[segment]; !ok {
+
+		var seg = c.root.newMetricsSegment(hit)
+		c.segments[segment] = seg
+	}
+}
+
+func (c *childSegment) getSegment(segment int) *metricsSegment {
+	if seg, ok := c.segments[segment]; ok {
+		return seg
+	}
+	return nil
+}
+
+func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
 	return &metricsSegment{
 		def:    m,
-		rate:   rate,
+		hit:    hit,
+		rate:   hit.Rate,
 		total:  m.newMetricsItem(),
 		status: map[string]*metricsItem{},
 		busy:   metrics.NewRegisteredHistogram("busy", m.registry, metrics.NewExpDecaySample(1028, 0.015)),
@@ -116,6 +144,7 @@ func (m *metricsDef) newMetricsSegment(rate float64) *metricsSegment {
 type metricsSegment struct {
 	sync   sync.RWMutex
 	def    *metricsDef
+	hit    HitSegment
 	rate   float64
 	busy   metrics.Histogram
 	total  *metricsItem

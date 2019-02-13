@@ -1,13 +1,13 @@
-package blast_test
+package blitzkrieg_test
 
 import (
 	"bytes"
+	"io"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
-
-
 
 func must(t *testing.T, err error) {
 	t.Helper()
@@ -58,67 +58,30 @@ func (b *ThreadSafeBuffer) String() string {
 	return b.b.String()
 }
 
-func NewLoggingReadWriteCloser(data string) *LoggingReadWriteCloser {
-	return &LoggingReadWriteCloser{
-		Buf: bytes.NewBufferString(data),
-	}
+// NewWriteCounter returns a new io.Writer wrapper
+// the passed in writer, where it counts total
+// writes it has received.
+func NewWriteCounter(w io.Writer) *WriteCounter {
+	return &WriteCounter{w: w}
 }
 
-type LoggingReadWriteCloser struct {
-	Buf      *bytes.Buffer
-	DidRead  bool
-	DidWrite bool
-	DidClose bool
+type WriteCounter struct {
+	w               io.Writer
+	bytesWritten    int64
+	totalWriteCalls int64
 }
 
-func (l *LoggingReadWriteCloser) Read(p []byte) (n int, err error) {
-	l.DidRead = true
-	return l.Buf.Read(p)
+func (w *WriteCounter) TotalWriteCalls() int {
+	return int(atomic.LoadInt64(&w.totalWriteCalls))
 }
 
-func (l *LoggingReadWriteCloser) Write(p []byte) (n int, err error) {
-	l.DidWrite = true
-	return l.Buf.Write(p)
+func (w *WriteCounter) BytesWritten() int {
+	return int(atomic.LoadInt64(&w.bytesWritten))
 }
 
-func (l *LoggingReadWriteCloser) Close() error {
-	l.DidClose = true
-	return nil
-}
-
-func (l *LoggingReadWriteCloser) mustClose(t *testing.T) {
-	t.Helper()
-	if !l.DidClose {
-		t.Fatal("Did not close")
-	}
-}
-func (l *LoggingReadWriteCloser) mustRead(t *testing.T) {
-	t.Helper()
-	if !l.DidRead {
-		t.Fatal("Did not read")
-	}
-}
-func (l *LoggingReadWriteCloser) mustWrite(t *testing.T) {
-	t.Helper()
-	if !l.DidWrite {
-		t.Fatal("Did not write")
-	}
-}
-func (l *LoggingReadWriteCloser) mustNotClose(t *testing.T) {
-	t.Helper()
-	if l.DidClose {
-		t.Fatal("Did close")
-	}
-}
-func (l *LoggingReadWriteCloser) mustNotRead(t *testing.T) {
-	t.Helper()
-	if l.DidRead {
-		t.Fatal("Did read")
-	}
-}
-func (l *LoggingReadWriteCloser) mustNotWrite(t *testing.T) {
-	t.Helper()
-	if l.DidWrite {
-		t.Fatal("Did write")
-	}
+func (w *WriteCounter) Write(b []byte) (int, error) {
+	atomic.AddInt64(&w.totalWriteCalls, 1)
+	written, err := w.w.Write(b)
+	atomic.AddInt64(&w.bytesWritten, int64(written))
+	return written, err
 }

@@ -1,11 +1,12 @@
-package blast
+package blitzkrieg
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/francoispqt/gojay"
 	"time"
+
+	"github.com/francoispqt/gojay"
 )
 
 // Stringify returns a giving value as a string.
@@ -47,7 +48,7 @@ type Worker interface {
 	// You only make request for a single or set of requests for just one call to your
 	// service target. Blitzkrieg handles concurrent hits to your target by calling
 	// multiple versions of your worker.
-	Send(ctx context.Context, workerCtx *WorkerContext)  error
+	Send(ctx context.Context, workerCtx *WorkerContext) error
 }
 
 // Starter is an interface a worker can optionally satisfy to provide initialization logic.
@@ -66,16 +67,16 @@ type Stopper interface {
 
 // FunctionWorker facilitates code examples by satisfying the Worker, Starter and Stopper interfaces with provided functions.
 type FunctionWorker struct {
-	StopFunc  func(ctx context.Context) error
-	StartFunc func(ctx context.Context) error
+	StopFunc    func(ctx context.Context) error
+	StartFunc   func(ctx context.Context) error
 	PrepareFunc func(ctx context.Context) (*WorkerContext, error)
-	SendFunc  func(ctx context.Context,  lastWctx *WorkerContext) error
+	SendFunc    func(ctx context.Context, lastWctx *WorkerContext) error
 }
 
 // Send satisfies the Worker interface.
-func (e *FunctionWorker) Send(ctx context.Context,  lastWctx *WorkerContext)  error {
+func (e *FunctionWorker) Send(ctx context.Context, lastWctx *WorkerContext) error {
 	if e.SendFunc == nil {
-		return  nil
+		return nil
 	}
 	return e.SendFunc(ctx, lastWctx)
 }
@@ -91,7 +92,7 @@ func (e *FunctionWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
 // Start satisfies the Starter interface.
 func (e *FunctionWorker) Start(ctx context.Context) error {
 	if e.StartFunc == nil {
-		return  nil
+		return nil
 	}
 	return e.StartFunc(ctx)
 }
@@ -110,9 +111,9 @@ func (e *FunctionWorker) Stop(ctx context.Context) error {
 
 // Payload is defines the content to be used for a giving request with it's headers
 // body and possible parameters depending on the underline protocol logic.
-type Payload struct{
-	Body []byte
-	Params map[string]string
+type Payload struct {
+	Body    []byte
+	Params  map[string]string
 	Headers map[string][]string
 }
 
@@ -122,7 +123,7 @@ func (p Payload) IsNil() bool {
 }
 
 // MarshalJSONObject implements gojay.MarshalJSONObject interface.
-func (p Payload) MarshalJSONObject(encoder *gojay.Encoder){
+func (p Payload) MarshalJSONObject(encoder *gojay.Encoder) {
 	encoder.StringKey("body", string(p.Body))
 	encoder.ObjectKey("params", paramEncodable(p.Params))
 	encoder.ObjectKey("headers", headersEncodable(p.Headers))
@@ -178,22 +179,24 @@ func (p headersEncodable) MarshalJSONObject(enc *gojay.Encoder) {
 //
 // WorkerContext is not safe for concurrent use by multiple go-routines, nor is it
 // intended to be.
-type WorkerContext struct{
-	segment int
-	target string
-	segmentID string
-	meta interface{}
-	end time.Time
-	start time.Time
-	sendStart time.Time
+type WorkerContext struct {
+	segment     int
+	worker      int
+	hitseg      HitSegment
+	target      string
+	segmentID   string
+	meta        interface{}
+	end         time.Time
+	start       time.Time
+	sendStart   time.Time
 	requestBody Payload
 
-	workerErr error
-	workerStatus string
-	responseBody Payload
+	workerErr       error
+	workerStatus    string
+	responseBody    Payload
 	finishedRequest bool
 
-	parent *WorkerContext
+	parent   *WorkerContext
 	children []WorkerContext
 }
 
@@ -208,7 +211,7 @@ func NewWorkerContext(target string, req Payload, meta interface{}) *WorkerConte
 // WorkerContextWithoutPayload returns a new WorkerContext with a default empty
 // payload.
 func WorkerContextWithoutPayload(meta interface{}) *WorkerContext {
-	return requestWorkerContext("", Payload{}, meta, nil)
+	return requestWorkerContext("(root)", Payload{}, meta, nil)
 }
 
 // FromContext returns a new WorkerContext which is based of this worker
@@ -219,7 +222,7 @@ func (w *WorkerContext) FromContext(target string, nextReq Payload, meta interfa
 
 // requestWorkerContext returns a new WorkerContext which has giving request
 // payload and last context for use.
-func requestWorkerContext(target string, req Payload,meta interface{}, last *WorkerContext) *WorkerContext {
+func requestWorkerContext(target string, req Payload, meta interface{}, last *WorkerContext) *WorkerContext {
 	var w WorkerContext
 	w.meta = meta
 	w.parent = last
@@ -227,9 +230,9 @@ func requestWorkerContext(target string, req Payload,meta interface{}, last *Wor
 	w.segmentID = target
 	w.requestBody = req
 	w.start = time.Now()
-	
+
 	if last != nil {
-		w.segmentID = fmt.Sprint("%s/%s", last.segmentID, target)
+		w.segmentID = fmt.Sprintf("%s/%s", last.segmentID, target)
 		last.children = append(last.children, w)
 		w.segment = last.segment
 	}
@@ -286,19 +289,22 @@ func (w *WorkerContext) IsNil() bool {
 	return false
 }
 
-func (w *WorkerContext) buildMetric(section *metricsSegment, root *metricsDef)  {
+func (w *WorkerContext) buildMetric(section *metricsSegment, root *metricsDef) {
 	// if this is the root then log finish and details.
 	if section == nil {
 		root.logFinish(w.segment, w.workerStatus, time.Since(w.sendStart), w.workerErr == nil)
 	}
-	
+
 	for _, child := range w.children {
-		root.logSection(child.segmentID, child.buildMetric)
+		root.logSection(w.hitseg.Rate, child.segmentID, child.segment, child.hitseg, child.buildMetric)
 	}
 }
 
 // MarshalJSONObject implements gojay.MarshalJSONObject interface method.
 func (w *WorkerContext) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.IntKey("segment", w.segment)
+	enc.IntKey("worker_int", w.worker)
+	enc.StringKey("segment_id", w.segmentID)
 	enc.StringKey("request_target", w.target)
 	enc.StringKey("response_status", w.workerStatus)
 	enc.ObjectKey("request_payload", w.requestBody)
@@ -338,5 +344,3 @@ func (w *WorkerContext) SetResponse(status string, payload Payload, err error) e
 	w.finishedRequest = true
 	return nil
 }
-
-
