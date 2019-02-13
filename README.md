@@ -39,7 +39,7 @@ of a API target.
 
  Total
  -----
- Started:          84525        69004        14249        1272
+ Prepareed:          84525        69004        14249        1272
  Finished:         82525        67004        14249        1272
  Mean:             376.0 ms     374.8 ms     379.3 ms     377.9 ms
  95th:             491.1 ms     488.1 ms     488.2 ms     489.6 ms
@@ -120,7 +120,7 @@ func (e *LalaWorker) Send(ctx context.Context,  workerContext *WorkerContext) er
 	return err
 }
 
-// Prepare Start should be where you load the sample data you wish to test your worker with.
+// Prepare Prepare should be where you load the sample data you wish to test your worker with.
 // You might need to implement some means of selectively or randomly loading different
 // data for your load tests here, as Blitzkrieg won't handle that for you.
 //
@@ -154,7 +154,7 @@ func (e *LalaWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
 	return blitskrieg.NewWorkerContext("raf-api-test", payload, serviceMeta)
 }
 
-// You handle some base initialization logic you wish to be done before worker use.
+// Start handle some base initialization logic you wish to be done before worker use.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -213,7 +213,7 @@ func (e *LalaWorker) Send(ctx context.Context,  workerContext *WorkerContext) er
 	return err
 }
 
-// Prepare Start should be where you load the sample data you wish to test your worker with.
+// Prepare Prepare should be where you load the sample data you wish to test your worker with.
 // You might need to implement some means of selectively or randomly loading different
 // data for your load tests here, as Blitzkrieg won't handle that for you.
 //
@@ -247,7 +247,7 @@ func (e *LalaWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
 	return blitskrieg.NewWorkerContext("raf-api-test", payload, serviceMeta)
 }
 
-// You handle some base initialization logic you wish to be done before worker use.
+// Start handle some base initialization logic you wish to be done before worker use.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -275,10 +275,10 @@ defer b.Exit()
 b.SetWorker(func() blitzkrieg.Worker {
 	return &blitzkrieg.FunctionWorker{
 		SendFunc: func(ctx context.Context, workerCtx *blistskrieg.WorkerContext) error {
-			workerCtx.SetStatus(blitzkrieg.Stringify(200))
+			workerCtx.SetResponse(blitzkrieg.Stringify(200),blitzkrieg.Payload{}, nil)
 			return nil
 		},
-		Start: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
+		Prepare: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
 			var payload blitskrieg.Payload
 			payload.Headers = []string{"header"}
 			payload.SetData(strings.NewReader("foo\nbar"))
@@ -287,7 +287,7 @@ b.SetWorker(func() blitzkrieg.Worker {
 	}
 })
 
-stats, err := b.Start(ctx, blitskrieg.Config{
+stats, err := b.Prepare(ctx, blitskrieg.Config{
 	Rate: 1000,
 })
 
@@ -311,10 +311,10 @@ defer b.Exit()
 b.SetWorker(func() blitzkrieg.Worker {
 	return &blitzkrieg.FunctionWorker{
 		SendFunc: func(ctx context.Context, workerCtx *blistskrieg.WorkerContext) error {
-			workerCtx.SetStatus(blitzkrieg.Stringify(200))
+			workerCtx.SetResponse(blitzkrieg.Stringify(200),blitzkrieg.Payload{}, nil)
 			return nil
 		},
-		Start: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
+		Prepare: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
 			var payload blitskrieg.Payload
 			payload.Headers = []string{"header"}
 			payload.SetData(strings.NewReader("foo\nbar"))
@@ -327,7 +327,7 @@ wg := &sync.WaitGroup{}
 wg.Add(1)
 
 go func() {
-	stats, err := b.Start(ctx, blitskrieg.Config{
+	stats, err := b.Prepare(ctx, blitskrieg.Config{
 		Rate: 1000,
 	})
 	if err != nil {

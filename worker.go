@@ -70,7 +70,7 @@ type FunctionWorker struct {
 	StopFunc    func(ctx context.Context) error
 	StartFunc   func(ctx context.Context) error
 	PrepareFunc func(ctx context.Context) (*WorkerContext, error)
-	SendFunc    func(ctx context.Context, lastWctx *WorkerContext) error
+	SendFunc    func(ctx context.Context, workerCtx *WorkerContext) error
 }
 
 // Send satisfies the Worker interface.
@@ -292,7 +292,14 @@ func (w *WorkerContext) IsNil() bool {
 func (w *WorkerContext) buildMetric(section *metricsSegment, root *metricsDef) {
 	// if this is the root then log finish and details.
 	if section == nil {
-		root.logFinish(w.segment, w.workerStatus, time.Since(w.sendStart), w.workerErr == nil)
+
+		// if we did not finish the request, then we must inform that this was a
+		// and unfinished request.
+		if !w.finishedRequest {
+			root.logSkip()
+		} else {
+			root.logFinish(w.segment, w.workerStatus, time.Since(w.sendStart), w.workerErr == nil)
+		}
 	}
 
 	for _, child := range w.children {
@@ -305,6 +312,7 @@ func (w *WorkerContext) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.IntKey("segment", w.segment)
 	enc.IntKey("worker_int", w.worker)
 	enc.StringKey("segment_id", w.segmentID)
+	enc.BoolKey("finished", w.finishedRequest)
 	enc.StringKey("request_target", w.target)
 	enc.StringKey("response_status", w.workerStatus)
 	enc.ObjectKey("request_payload", w.requestBody)
@@ -332,6 +340,9 @@ func (w *WorkerContext) Response() (Payload, error) {
 // the response payload and status and possible error which you wish to set as
 // the signifying error for giving request else this get's set to the returned error
 // from a worker when finished a giving run.
+//
+// if an error occurs on the worker or if the response err value is set then we consider
+// the work a failure and not a success.
 func (w *WorkerContext) SetResponse(status string, payload Payload, err error) error {
 	if w.finishedRequest {
 		return ErrWorkerFinished

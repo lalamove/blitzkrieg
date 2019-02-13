@@ -355,10 +355,6 @@ func TestBlasterAddHitSegmentAfterFinishedSegment(t *testing.T) {
 
 	w.Wait()
 
-	// some worker may not be finished even after a segment
-	// is done.
-	//<-time.After(10 * time.Millisecond)
-
 	// exit since it's running in endless mode.
 	blits.Exit()
 

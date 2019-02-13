@@ -68,6 +68,14 @@ type Config struct {
 	// SegmentedEnded sets a function to be executed once a segment has finished.
 	OnSegmentEnd func(HitSegment)
 
+	// OnEachRun sets a function to be called on every finished execution of a giving
+	// worker's request work. This way you get access to the current stat, worker id
+	// and worker context used within a single instance run of a segment run.
+	//
+	// Note this is called for every completion of an individual request, so if you
+	// set a HitSegment.MaxHits of 1000, then this would be called 1000 times.
+	OnEachRun func(workerId int, workerContext *WorkerContext, stat Stats)
+
 	// DefaultHeaders contains default headers that all workers must include
 	// in their requests.
 	//
@@ -457,13 +465,19 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 	}
 }
 
+const contextErrorMessage = "a worker was still sending after timeout + 1 second. This indicates a bug in the worker code. Workers should immediately exit on receiving a signal from ctx.Done()"
+
 func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID int, hit HitSegment) error {
 	b.metrics.logStart(segmentID)
 	b.metrics.logBusy(segmentID)
 	b.metrics.busy.Inc(1)
 	defer b.metrics.busy.Dec(1)
 
-	var newWorkContext, err = w.Prepare(ctx)
+	// Create a child context with the selected timeout
+	child, cancel := context.WithTimeout(ctx, b.softTimeout)
+	defer cancel()
+
+	var newWorkContext, err = w.Prepare(child)
 	if err != nil {
 		b.error(errors.WithStack(err))
 		return err
@@ -492,10 +506,6 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 
 	// Record the start time
 	newWorkContext.sendStart = time.Now()
-
-	// Create a child context with the selected timeout
-	child, cancel := context.WithTimeout(ctx, b.softTimeout)
-	defer cancel()
 
 	finished := make(chan struct{})
 
@@ -531,11 +541,16 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 		// If we get here then the worker is not respecting the context cancellation deadline, and
 		// we should exit with an error. We don't simply log this as an unsuccessful request
 		// because the sending goroutine is still running and would crete a memory leak.
-		b.error(errors.New("a worker was still sending after timeout + 1 second. This indicates a bug in the worker code. Workers should immediately exit on receiving a signal from ctx.Done()"))
+		b.error(errors.New(contextErrorMessage))
 		return nil
 	}
 
 	newWorkContext.buildMetric(nil, b.metrics)
+
+	// Call the OnEachWorker function if set.
+	if b.config.OnEachRun != nil {
+		b.config.OnEachRun(workerID, newWorkContext, b.metrics.stats())
+	}
 
 	if b.config.Log != nil {
 		encoder := gojay.BorrowEncoder(b.config.Log)

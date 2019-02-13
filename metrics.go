@@ -108,27 +108,6 @@ func (m *metricsDef) newSubMetrics(section string, segment int, hit HitSegment) 
 	return &child
 }
 
-type childSegment struct {
-	root     *metricsDef
-	segments map[int]*metricsSegment
-	key      string
-}
-
-func (c *childSegment) addSegment(segment int, hit HitSegment) {
-	if _, ok := c.segments[segment]; !ok {
-
-		var seg = c.root.newMetricsSegment(hit)
-		c.segments[segment] = seg
-	}
-}
-
-func (c *childSegment) getSegment(segment int) *metricsSegment {
-	if seg, ok := c.segments[segment]; ok {
-		return seg
-	}
-	return nil
-}
-
 func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
 	return &metricsSegment{
 		def:    m,
@@ -189,4 +168,25 @@ type metricsItem struct {
 	finish  metrics.Timer
 	success metrics.Counter
 	fail    metrics.Counter
+}
+
+type childSegment struct {
+	root     *metricsDef
+	segments map[int]*metricsSegment
+	key      string
+}
+
+func (c *childSegment) addSegment(segment int, hit HitSegment) {
+	if _, ok := c.segments[segment]; !ok {
+
+		var seg = c.root.newMetricsSegment(hit)
+		c.segments[segment] = seg
+	}
+}
+
+func (c *childSegment) getSegment(segment int) *metricsSegment {
+	if seg, ok := c.segments[segment]; ok {
+		return seg
+	}
+	return nil
 }

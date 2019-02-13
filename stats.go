@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+// Formattable defines a interface which provides a method to accept
+// a Formatter.
+type Formattable interface {
+	Format(Formatter) error
+}
+
+// Formatter defines a interface which exposes methods to
+// format a underline key-value pair and cases of sub fields
+// which must implement the Formattable interface.
+type Formatter interface {
+	Format(key string, value interface{}) error
+
+	List(key string, set []Formattable) error
+	Under(key string, formattable Formattable) error
+}
+
 // Stats is a snapshot of the metrics (as is printed during interactive execution).
 type Stats struct {
 	ConcurrencyCurrent int
@@ -16,16 +32,6 @@ type Stats struct {
 	Skipped            int64
 	All                *Segment
 	Segments           []*Segment
-}
-
-// Segment is a rate segment - a new segment is created each time the rate is changed.
-type Segment struct {
-	DesiredRate        float64
-	ActualRate         float64
-	AverageConcurrency float64
-	Duration           time.Duration
-	Summary            *Total
-	Status             []*Status
 }
 
 // Total is the summary of all requests in this segment
@@ -38,6 +44,11 @@ type Total struct {
 	NinetyFifth time.Duration
 }
 
+func (t Total) Format(f Formatter) error {
+
+	return nil
+}
+
 // Status is a summary of all requests that returned a specific status
 type Status struct {
 	Status      string
@@ -45,6 +56,56 @@ type Status struct {
 	Fraction    float64
 	Mean        time.Duration
 	NinetyFifth time.Duration
+}
+
+func (s Status) Format(f Formatter) error {
+	if err := f.Format("Status", s.Status); err != nil {
+		return err
+	}
+	if err := f.Format("Count", s.Count); err != nil {
+		return err
+	}
+	if err := f.Format("Fraction", s.Fraction); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Segment is a rate segment - a new segment is created each time the rate is changed.
+type Segment struct {
+	DesiredRate        float64
+	ActualRate         float64
+	AverageConcurrency float64
+	Duration           time.Duration
+	Summary            *Total
+	Status             []*Status
+	SubSegments        map[string][]*Segment
+}
+
+func (s Segment) Format(f Formatter) error {
+	if err := f.Format("DesiredRate", s.DesiredRate); err != nil {
+		return err
+	}
+	if err := f.Format("ActualRate", s.ActualRate); err != nil {
+		return err
+	}
+	if err := f.Format("AverageConcurrency", s.AverageConcurrency); err != nil {
+		return err
+	}
+	if err := f.Format("Duration", s.Duration); err != nil {
+		return err
+	}
+	if err := f.Under("Summary", s.Summary); err != nil {
+		return err
+	}
+
+	for _, status := range s.Status {
+		if err := f.Under(status.Status, status); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (m *metricsDef) stats() Stats {
@@ -59,9 +120,16 @@ func (m *metricsDef) stats() Stats {
 
 	// add some stats segments
 	for range m.segments {
-		s.Segments = append(s.Segments, &Segment{
-			Summary: &Total{},
-		})
+		var segment = Segment{
+			Summary:     &Total{},
+			SubSegments: map[string][]*Segment{},
+		}
+
+		for key, child := range m.sections {
+			segment.SubSegments[key] = make([]*Segment, 0, len(child.segments))
+		}
+
+		s.Segments = append(s.Segments, &segment)
 	}
 
 	// find all statuses and order
@@ -102,6 +170,43 @@ func (m *metricsDef) stats() Stats {
 		seg.Summary.Fail = m.segments[i].total.fail.Count()
 		seg.Summary.Mean = time.Duration(m.segments[i].total.finish.Mean()/1000000.0) * time.Millisecond
 		seg.Summary.NinetyFifth = time.Duration(m.segments[i].total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
+
+		for key, child := range m.sections {
+			subSegments := seg.SubSegments[key]
+
+			if metricChildSeg, ok := child.segments[i]; ok {
+				var cseg Segment
+				cseg.Summary = &Total{}
+
+				cseg.DesiredRate = metricChildSeg.rate
+				cseg.ActualRate = float64(metricChildSeg.total.start.Count()) / metricChildSeg.duration().Seconds()
+				cseg.AverageConcurrency = metricChildSeg.busy.Mean()
+				cseg.Duration = metricChildSeg.duration()
+				cseg.Summary.Started = metricChildSeg.total.start.Count()
+				cseg.Summary.Finished = metricChildSeg.total.finish.Count()
+				cseg.Summary.Success = metricChildSeg.total.success.Count()
+				cseg.Summary.Fail = metricChildSeg.total.fail.Count()
+				cseg.Summary.Mean = time.Duration(metricChildSeg.total.finish.Mean()/1000000.0) * time.Millisecond
+				cseg.Summary.NinetyFifth = time.Duration(metricChildSeg.total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
+
+				var csegStatus = map[string]*Status{}
+				for statusKey, statusItem := range metricChildSeg.status {
+					if _, ok := csegStatus[statusKey]; !ok {
+						var sem = &Status{Status: statusKey}
+						csegStatus[statusKey] = sem
+						cseg.Status = append(cseg.Status, sem)
+					}
+
+					var elem = csegStatus[statusKey]
+					elem.Count = statusItem.finish.Count()
+					elem.Fraction = float64(statusItem.finish.Count()) / float64(metricChildSeg.total.finish.Count())
+					elem.Mean = time.Duration(statusItem.finish.Mean()/1000000.0) * time.Millisecond
+					elem.NinetyFifth = time.Duration(statusItem.finish.Percentile(0.95)/1000000.0) * time.Millisecond
+				}
+
+				subSegments = append(subSegments, &cseg)
+			}
+		}
 	}
 
 	for statusIndex, status := range statuses {
@@ -109,6 +214,7 @@ func (m *metricsDef) stats() Stats {
 		s.All.Status[statusIndex].Fraction = float64(m.all.status[status].finish.Count()) / float64(m.all.total.finish.Count())
 		s.All.Status[statusIndex].Mean = time.Duration(m.all.status[status].finish.Mean()/1000000.0) * time.Millisecond
 		s.All.Status[statusIndex].NinetyFifth = time.Duration(m.all.status[status].finish.Percentile(0.95)/1000000.0) * time.Millisecond
+
 		for segmentIndex, seg := range s.Segments {
 			if m.segments[segmentIndex].status[status] != nil {
 				seg.Status[statusIndex].Count = m.segments[segmentIndex].status[status].finish.Count()
@@ -138,7 +244,7 @@ func (s Stats) String() string {
 	tabs := strings.Repeat("\t", len(segments)+2)
 
 	if s.Skipped > 0 {
-		fmt.Fprintf(w, "Skipped:\t%d from previous runs\n", s.Skipped)
+		fmt.Fprintf(w, "No Response:\t%d (Worker requests ending with no response) \n", s.Skipped)
 	}
 
 	fmt.Fprintf(w, "Concurrency:\t%d / %d workers in use\n", s.ConcurrencyCurrent, s.ConcurrencyMaximum)
