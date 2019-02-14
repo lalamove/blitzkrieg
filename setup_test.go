@@ -66,6 +66,7 @@ func NewWriteCounter(w io.Writer) *WriteCounter {
 }
 
 type WriteCounter struct {
+	wl              sync.Mutex
 	w               io.Writer
 	bytesWritten    int64
 	totalWriteCalls int64
@@ -81,7 +82,11 @@ func (w *WriteCounter) BytesWritten() int {
 
 func (w *WriteCounter) Write(b []byte) (int, error) {
 	atomic.AddInt64(&w.totalWriteCalls, 1)
+
+	w.wl.Lock()
 	written, err := w.w.Write(b)
+	w.wl.Unlock()
+
 	atomic.AddInt64(&w.bytesWritten, int64(written))
 	return written, err
 }

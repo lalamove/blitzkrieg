@@ -126,9 +126,11 @@ type Config struct {
 type Blaster struct {
 	config *Config
 
-	segments    []HitSegment
 	softTimeout time.Duration
 	hardTimeout time.Duration
+
+	sgml     sync.RWMutex
+	segments []HitSegment
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -223,10 +225,15 @@ func (b *Blaster) initialiseConfig(c Config) error {
 }
 
 func (b *Blaster) isEmptySegments() bool {
+	b.sgml.RLock()
+	defer b.sgml.RUnlock()
 	return len(b.segments) == 0
 }
 
 func (b *Blaster) getCurrentSegment() (HitSegment, bool) {
+	b.sgml.RLock()
+	defer b.sgml.RUnlock()
+
 	if len(b.segments) != 0 {
 		return b.segments[0], true
 	}
@@ -651,7 +658,9 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			b.printf("Reached max hits %d for segment %#v \n", lastHits, currentSegment)
 
 			if len(b.segments) == 1 {
+				b.sgml.Lock()
 				b.segments = b.segments[:0]
+				b.sgml.Unlock()
 
 				// signal end of segments test list if not endless.
 				if !b.config.Endless {
@@ -667,8 +676,12 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			}
 
 			// eject last segment and update ticker.
+			var newSegment HitSegment
+
+			b.sgml.Lock()
 			b.segments = b.segments[1:]
-			var newSegment = b.segments[0]
+			newSegment = b.segments[0]
+			b.sgml.Unlock()
 
 			// add new segment into our metrics collector.
 			b.metrics.addSegment(newSegment)
@@ -710,7 +723,9 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			case <-b.hitSegmentFinishedChannel:
 				return
 			case hs := <-b.addHitSegment:
+				b.sgml.Lock()
 				b.segments = append(b.segments, hs)
+				b.sgml.Unlock()
 			}
 
 			// if we have processed all hit segments and
@@ -718,6 +733,16 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			// or if endless, just continue
 			if b.isEmptySegments() && b.config.Endless {
 				b.println("No more hit segments, waiting for new ones...")
+				continue
+			}
+
+			// We will only ever increment the hits only when
+			// a worker was successfully a able to pick up work
+			// in main loop.
+			var newCount = atomic.LoadInt64(&totalHits)
+			if checkSegment(int(newCount)) {
+				b.println("Resetting hit count for new segment")
+				atomic.StoreInt64(&totalHits, 0)
 				continue
 			}
 
@@ -735,15 +760,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			case b.mainChannel <- segment:
 				var currentCount = atomic.LoadInt64(&totalHits)
 				b.printf("Sending segment %d for processing at hit %d \n", segment, currentCount)
-
-				// We will only ever increment the hits only when
-				// a worker was successfully a able to pick up work
-				// in main loop.
-				var newCount = atomic.AddInt64(&totalHits, 1)
-				if checkSegment(int(newCount)) {
-					b.println("Resetting hit count for new segment")
-					atomic.StoreInt64(&totalHits, 0)
-				}
+				atomic.AddInt64(&totalHits, 1)
 			default:
 				// if main loop is busy, skip this tick
 				// and retry again.

@@ -270,7 +270,7 @@ func TestBlasterExitSignal(t *testing.T) {
 	blits := blitzkrieg.New()
 	go func() {
 		_, err := blits.Start(context.Background(), blitzkrieg.Config{
-			Workers: 1,
+			Workers: 3,
 			Endless: true,
 			OnSegmentEnd: func(_ blitzkrieg.HitSegment) {
 				done <- struct{}{}
@@ -292,24 +292,28 @@ func TestBlasterExitSignal(t *testing.T) {
 
 	<-done
 
+	hits := int(atomic.LoadInt64(&hit.hits))
+
 	select {
 	case <-errChan:
 		require.Fail(t, "Should not have received error")
 	case <-signalChan:
 		require.Fail(t, "Should not have received end signal")
-	case <-time.After(2 * time.Second):
-		require.Equal(t, 10, int(hit.hits))
+	case <-time.After(1 * time.Second):
+		require.Equal(t, 10, hits)
 	}
 
 	// exit since it's running in endless mode.
 	blits.Exit()
+
+	hits = int(atomic.LoadInt64(&hit.hits))
 
 	select {
 	case <-signalChan:
 		require.Len(t, errChan, 1)
 		require.Nil(t, <-errChan)
 	case <-time.After(1 * time.Second):
-		require.Equal(t, 10, int(hit.hits))
+		require.Equal(t, 10, hits)
 	}
 }
 
@@ -360,7 +364,7 @@ func TestBlasterAddHitSegmentAfterFinishedSegment(t *testing.T) {
 
 	r.Wait()
 
-	var hits = int(hit.hits)
+	hits := int(atomic.LoadInt64(&hit.hits))
 	require.Equal(t, 20, hits)
 	require.Len(t, errChan, 1)
 	require.Nil(t, <-errChan)
