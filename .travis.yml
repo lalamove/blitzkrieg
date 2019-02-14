@@ -2,7 +2,8 @@ language: go
 go:
     - 1.x
 install:
-  - go get -coverprofile cover.out -t -v ./...
+  - env GO111MODULE=on go get -t -v ./...
 script:
+  - ./test.sh
 after_success:
   - bash <(curl -s https://codecov.io/bash)
