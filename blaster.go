@@ -45,14 +45,6 @@ type HitSegment struct {
 	// which this segment will run.
 	// (Defaults: 1000).
 	MaxHits int
-
-	// Spread sets the flag whether for each count of the segment
-	// of load testing towards the HitSegment.MaxHits if we wish to
-	// have all other available workers simultaneously attempt to hit
-	// the target or if we only need one worker processing the load
-	// test for each count.
-	// (Default: false).
-	//Spread bool
 }
 
 func (hs *HitSegment) init() {
@@ -395,23 +387,6 @@ func (b *Blaster) startMainLoop(ctx context.Context) {
 				// ensure we exit worker channel if we were closed.
 				select {
 				case b.workerChannel <- segment:
-					// TODO(alex): Decide if we still want this:
-					//
-					// if we were accepted, then does this current segment expect
-					// spreading?, if so attempt to send as much work to other available
-					// workers, skip does we can't reach for work.
-					//if hit, ok := b.getCurrentSegment(); ok {
-					//	if hit.Spread {
-					//		for i := 0; i < b.config.Workers-1; i++ {
-					//			select {
-					//			case b.workerChannel <- segment:
-					//			default:
-					//				// skip if no worker to handle this.
-					//				continue
-					//			}
-					//		}
-					//	}
-					//}
 				case <-b.hitSegmentFinishedChannel:
 				}
 
