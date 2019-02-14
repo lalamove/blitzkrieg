@@ -43,10 +43,10 @@ type Worker interface {
 	// responsible for creating what data a request should be or contain.
 	Prepare(ctx context.Context) (*WorkerContext, error)
 
-	// Send handles the internal request/requests we wish to make for to our target.
+	// Send handles the internal request/requests we wish to make for to our title.
 	//
 	// You only make request for a single or set of requests for just one call to your
-	// service target. Blitzkrieg handles concurrent hits to your target by calling
+	// service title. Blitzkrieg handles concurrent hits to your title by calling
 	// multiple versions of your worker.
 	Send(ctx context.Context, workerCtx *WorkerContext) error
 }
@@ -183,7 +183,7 @@ type WorkerContext struct {
 	segment     int
 	worker      int
 	hitseg      HitSegment
-	target      string
+	title       string
 	segmentID   string
 	meta        interface{}
 	end         time.Time
@@ -197,46 +197,53 @@ type WorkerContext struct {
 	finishedRequest bool
 
 	parent   *WorkerContext
-	children []WorkerContext
+	children []*WorkerContext
 }
 
 // NewWorkerContext returns a new WorkerContext which has no previous context.
 // Arguments:
 //	 - meta: This is any meta type you wish to be attached to your WorkerContext
-//          like a Config for the target information.
-func NewWorkerContext(target string, req Payload, meta interface{}) *WorkerContext {
-	return requestWorkerContext(target, req, meta, nil)
+//          like a Config for the title information.
+func NewWorkerContext(title string, req Payload, meta interface{}) *WorkerContext {
+	return requestWorkerContext(title, req, meta, nil)
 }
 
 // WorkerContextWithoutPayload returns a new WorkerContext with a default empty
 // payload.
+//
+// Always provide a descriptive title for a worker context for easy recognition.
 func WorkerContextWithoutPayload(meta interface{}) *WorkerContext {
 	return requestWorkerContext("(root)", Payload{}, meta, nil)
 }
 
 // FromContext returns a new WorkerContext which is based of this worker
 // context, connecting this as it's previous context.
-func (w *WorkerContext) FromContext(target string, nextReq Payload, meta interface{}) *WorkerContext {
-	return requestWorkerContext(target, nextReq, meta, w)
+//
+// Always provide a descriptive title for a worker context for easy recognition.
+func (w *WorkerContext) FromContext(title string, nextReq Payload, meta interface{}) *WorkerContext {
+	return requestWorkerContext(title, nextReq, meta, w)
 }
 
 // requestWorkerContext returns a new WorkerContext which has giving request
-// payload and last context for use.
-func requestWorkerContext(target string, req Payload, meta interface{}, last *WorkerContext) *WorkerContext {
-	var w WorkerContext
+// payload and last context for use with title set as desired.
+//
+// Always provide a descriptive title for a worker context for easy recognition.
+func requestWorkerContext(title string, req Payload, meta interface{}, last *WorkerContext) *WorkerContext {
+	var w = new(WorkerContext)
 	w.meta = meta
 	w.parent = last
-	w.target = target
-	w.segmentID = target
+	w.title = title
+	w.segmentID = title
 	w.requestBody = req
 	w.start = time.Now()
 
 	if last != nil {
-		w.segmentID = fmt.Sprintf("%s/%s", last.segmentID, target)
+		w.sendStart = w.start
+		w.segmentID = fmt.Sprintf("%s/%s", last.segmentID, title)
 		last.children = append(last.children, w)
 		w.segment = last.segment
 	}
-	return &w
+	return w
 }
 
 // ParentContext returns parent worker context from where it
@@ -289,21 +296,17 @@ func (w *WorkerContext) IsNil() bool {
 	return false
 }
 
-func (w *WorkerContext) buildMetric(section *metricsSegment, root *metricsDef) {
-	// if this is the root then log finish and details.
-	if section == nil {
-
-		// if we did not finish the request, then we must inform that this was a
-		// and unfinished request.
-		if !w.finishedRequest {
-			root.logSkip()
-		} else {
-			root.logFinish(w.segment, w.workerStatus, time.Since(w.sendStart), w.workerErr == nil)
-		}
+func (w *WorkerContext) treePath() string {
+	if w.finishedRequest {
+		return fmt.Sprintf("%s (%s)", w.segmentID, w.workerStatus)
 	}
+	return fmt.Sprintf("%s (UNFINISHED)", w.segmentID)
+}
 
+func (w *WorkerContext) buildMetric(root *metricsDef) {
 	for _, child := range w.children {
-		root.logSection(w.hitseg.Rate, child.segmentID, child.segment, child.hitseg, child.buildMetric)
+		root.logSegmentFinish(child.segment, child.treePath(), time.Since(child.sendStart), child.workerErr == nil)
+		child.buildMetric(root)
 	}
 }
 
@@ -313,7 +316,7 @@ func (w *WorkerContext) MarshalJSONObject(enc *gojay.Encoder) {
 	enc.IntKey("worker_int", w.worker)
 	enc.StringKey("segment_id", w.segmentID)
 	enc.BoolKey("finished", w.finishedRequest)
-	enc.StringKey("request_target", w.target)
+	enc.StringKey("request_target", w.title)
 	enc.StringKey("response_status", w.workerStatus)
 	enc.ObjectKey("request_payload", w.requestBody)
 

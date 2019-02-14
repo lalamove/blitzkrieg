@@ -35,25 +35,21 @@ func main() {
 			},
 		},
 		Metrics:       os.Stdout,
-		PeriodicWrite: time.Millisecond * 300,
+		PeriodicWrite: time.Second * 3,
 		WorkerFunc: func() blitzkrieg.Worker {
 			return &blitzkrieg.FunctionWorker{
+				PrepareFunc: func(ctx context.Context) (workerContext *blitzkrieg.WorkerContext, e error) {
+					return blitzkrieg.NewWorkerContext("hello-service", blitzkrieg.Payload{}, nil), nil
+				},
 				SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
 					time.Sleep(time.Millisecond * time.Duration(rand.Intn(300)))
 
-					sub := workerCtx.FromContext("second-endpoint", blitzkrieg.Payload{}, nil)
-
-					errorrand := randy.Float64()
-					if errorrand > 0.99 {
-						sub.SetResponse("200", blitzkrieg.Payload{}, nil)
-						return workerCtx.SetResponse("400", blitzkrieg.Payload{Body: []byte("bad request")}, errors.New(" not allowed"))
-					} else if errorrand > 0.96 {
-						sub.SetResponse("400", blitzkrieg.Payload{}, errors.New("bad reqquest"))
-						return workerCtx.SetResponse("499", blitzkrieg.Payload{Body: []byte("waited too long")}, errors.New("request timed out"))
-					} else {
-						sub.SetResponse("499", blitzkrieg.Payload{}, errors.New("wasted reqquest"))
-						return workerCtx.SetResponse("200", blitzkrieg.Payload{Body: []byte("Sweet!")}, nil)
+					sub := workerCtx.FromContext("sub-service-call", blitzkrieg.Payload{}, nil)
+					if err := callSecondService(sub); err != nil {
+						return err
 					}
+
+					return callSecondService(workerCtx)
 				},
 			}
 		},
@@ -64,4 +60,18 @@ func main() {
 	}
 
 	fmt.Printf("Final Stats:\n\n %+s\n", stats.String())
+}
+
+func callSecondService(workerCtx *blitzkrieg.WorkerContext) error {
+	<-time.After(time.Millisecond * time.Duration(randy.Intn(100)))
+
+	errorrand := randy.Float64()
+	if errorrand > 0.99 {
+		return workerCtx.SetResponse("200", blitzkrieg.Payload{}, nil)
+	} else if errorrand > 0.96 {
+		return workerCtx.SetResponse("400", blitzkrieg.Payload{}, errors.New("bad reqquest"))
+	} else {
+		return workerCtx.SetResponse("499", blitzkrieg.Payload{}, errors.New("wasted reqquest"))
+	}
+	return nil
 }

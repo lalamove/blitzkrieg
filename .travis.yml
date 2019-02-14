@@ -2,7 +2,7 @@ language: go
 go:
     - 1.x
 install:
-  - go get -t -v ./...
+  - go get -coverprofile cover.out -t -v ./...
 script:
 after_success:
   - bash <(curl -s https://codecov.io/bash)

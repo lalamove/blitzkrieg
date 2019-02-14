@@ -27,44 +27,69 @@ of a API target.
  of metrics is created. If the worker returns a field named `status` in it's response, the values
  are summarised as rows.
 
- Here's an example of the output:
+ Here's an example of the output: (See [Hello](./examples/hello/main.go) for code)
 
- ```
- Metrics
- =======
- Concurrency:      1999 / 2000 workers in use
+```
+ 
+====================================================
+Metrics
+====================================================
+Concurrency:                          0 / 10 workers in use
 
- Desired rate:     (all)        10000        1000         100
- Actual rate:      2112         5354         989          100
- Avg concurrency:  1733         1976         367          37
- Duration:         00:40        00:12        00:14        00:12
+Desired rate:                         (all)       20         15        10
+Actual rate:                          19          20         15        10
+Avg concurrency:                      4           5          3         2
+Duration:                             01:02       00:50      00:06     00:05
 
- Total
- -----
- Prepareed:          84525        69004        14249        1272
- Finished:         82525        67004        14249        1272
- Mean:             376.0 ms     374.8 ms     379.3 ms     377.9 ms
- 95th:             491.1 ms     488.1 ms     488.2 ms     489.6 ms
+Total
+-----
+Started:                              1149        999        100       50
+Finished:                             1149        999        100       50
+Success:                              9           6          2         1
+Fail:                                 1140        993        98        49
+Mean:                                 252.0 ms    250.0 ms   260.0 ms  277.0 ms
+95th:                                 404.0 ms    404.0 ms   394.0 ms  425.0 ms
 
- 200
- ---
- Count:            79208 (96%)  64320 (96%)  13663 (96%)  1225 (96%)
- Mean:             376.2 ms     381.9 ms     374.7 ms     378.1 ms
- 95th:             487.6 ms     489.0 ms     487.2 ms     490.5 ms
+hello-service (200)
+-------------------
+Count:                                9 (1%)      6 (1%)     2 (2%)    1 (2%)
+Mean:                                 309.0 ms    289.0 ms   349.0 ms  352.0 ms
+95th:                                 391.0 ms    357.0 ms   391.0 ms  352.0 ms
 
- 404
- ---
- Count:            2467 (3%)    2002 (3%)    430 (3%)     35 (3%)
- Mean:             371.4 ms     371.0 ms     377.2 ms     358.9 ms
- 95th:             487.1 ms     487.1 ms     486.0 ms     480.4 ms
+hello-service (400)
+-------------------
+Count:                                43 (4%)     31 (3%)    8 (8%)    4 (8%)
+Mean:                                 260.0 ms    259.0 ms   241.0 ms  310.0 ms
+95th:                                 408.0 ms    415.0 ms   375.0 ms  380.0 ms
 
- 500
- ---
- Count:            853 (1%)     685 (1%)     156 (1%)     12 (1%)
- Mean:             371.2 ms     370.4 ms     374.5 ms     374.3 ms
- 95th:             487.6 ms     487.1 ms     488.2 ms     466.3 ms
+hello-service (499)
+-------------------
+Count:                                1097 (95%)  962 (96%)  90 (90%)  45 (90%)
+Mean:                                 252.0 ms    250.0 ms   259.0 ms  272.0 ms
+95th:                                 404.0 ms    404.0 ms   395.0 ms  428.0 ms
 
- ```
+hello-service/sub-service-call (200)
+------------------------------------
+Count:                                16 (1%)     14 (1%)    1 (1%)    1 (2%)
+Mean:                                 102.0 ms    102.0 ms   37.0 ms   166.0 ms
+95th:                                 166.0 ms    140.0 ms   37.0 ms   166.0 ms
+
+hello-service/sub-service-call (400)
+------------------------------------
+Count:                                40 (3%)     33 (3%)    5 (5%)    2 (4%)
+Mean:                                 103.0 ms    98.0 ms    126.0 ms  135.0 ms
+95th:                                 160.0 ms    153.0 ms   160.0 ms  176.0 ms
+
+hello-service/sub-service-call (499)
+------------------------------------
+Count:                                1093 (95%)  952 (95%)  94 (94%)  47 (94%)
+Mean:                                 100.0 ms    100.0 ms   104.0 ms  105.0 ms
+95th:                                 166.0 ms    166.0 ms   170.0 ms  182.0 ms
+
+====================================================
+
+
+```
 
 
 

@@ -16,15 +16,12 @@ type metricsDef struct {
 	all      *metricsSegment
 	segments []*metricsSegment
 	config   *Config
-
-	sections map[string]childSegment
 }
 
 func newMetricsDef(c *Config, hit HitSegment) *metricsDef {
 	r := metrics.NewRegistry()
 	m := &metricsDef{
 		registry: r,
-		sections: map[string]childSegment{},
 		busy:     metrics.NewRegisteredCounter("busy", r),
 		skipped:  metrics.NewRegisteredCounter("skipped", r),
 		config:   c,
@@ -57,24 +54,18 @@ func (m *metricsDef) logStart(segment int) {
 	m.segments[segment].logStart()
 }
 
-func (m *metricsDef) logSection(rate float64, section string, segment int, hit HitSegment, update func(*metricsSegment, *metricsDef)) {
-	m.sync.Lock()
-	defer m.sync.Unlock()
-
-	if child, ok := m.sections[section]; ok {
-		update(child.getSegment(segment), m)
-		return
-	}
-
-	child := m.newSubMetrics(section, segment, hit)
-	update(child.getSegment(segment), m)
-}
-
 func (m *metricsDef) logFinish(segment int, status string, elapsed time.Duration, success bool) {
 	m.sync.Lock()
 	defer m.sync.Unlock()
 	m.all.logFinish(status, elapsed, success)
 	m.segments[segment].logFinish(status, elapsed, success)
+}
+
+func (m *metricsDef) logSegmentFinish(segment int, status string, elapsed time.Duration, success bool) {
+	m.sync.Lock()
+	defer m.sync.Unlock()
+	m.all.logChildFinish(status, elapsed, success)
+	m.segments[segment].logChildFinish(status, elapsed, success)
 }
 
 func (m *metricsDef) addSegment(rate HitSegment) {
@@ -96,18 +87,6 @@ func (m *metricsDef) newMetricsItem() *metricsItem {
 	}
 }
 
-func (m *metricsDef) newSubMetrics(section string, segment int, hit HitSegment) *childSegment {
-	child := childSegment{
-		root:     m,
-		key:      section,
-		segments: map[int]*metricsSegment{},
-	}
-
-	child.addSegment(segment, hit)
-	m.sections[section] = child
-	return &child
-}
-
 func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
 	return &metricsSegment{
 		def:    m,
@@ -121,15 +100,16 @@ func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
 }
 
 type metricsSegment struct {
-	sync   sync.RWMutex
-	def    *metricsDef
-	hit    HitSegment
-	rate   float64
-	busy   metrics.Histogram
-	total  *metricsItem
+	sync  sync.RWMutex
+	def   *metricsDef
+	hit   HitSegment
+	rate  float64
+	busy  metrics.Histogram
+	total *metricsItem
+	start time.Time
+	end   time.Time
+
 	status map[string]*metricsItem
-	start  time.Time
-	end    time.Time
 }
 
 func (m *metricsSegment) duration() time.Duration {
@@ -159,6 +139,23 @@ func (m *metricsSegment) logFinish(status string, elapsed time.Duration, success
 		m.status[status].success.Inc(1)
 	} else {
 		m.total.fail.Inc(1)
+		m.status[status].fail.Inc(1)
+	}
+}
+
+func (m *metricsSegment) logChildFinish(status string, elapsed time.Duration, success bool) {
+	m.sync.Lock()
+	defer m.sync.Unlock()
+
+	if _, ok := m.status[status]; !ok {
+		m.status[status] = m.def.newMetricsItem()
+	}
+
+	m.status[status].finish.Update(elapsed)
+
+	if success {
+		m.status[status].success.Inc(1)
+	} else {
 		m.status[status].fail.Inc(1)
 	}
 }

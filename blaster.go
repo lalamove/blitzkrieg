@@ -545,7 +545,15 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 		return nil
 	}
 
-	newWorkContext.buildMetric(nil, b.metrics)
+	// if we did not finish the request, then we must inform that this was a
+	// and unfinished request.
+	if !newWorkContext.IsFinished() {
+		b.metrics.logSkip()
+	} else {
+		b.metrics.logFinish(newWorkContext.segment, newWorkContext.treePath(), time.Since(newWorkContext.sendStart), newWorkContext.Error() == nil)
+	}
+
+	newWorkContext.buildMetric(b.metrics)
 
 	// Call the OnEachWorker function if set.
 	if b.config.OnEachRun != nil {
@@ -586,6 +594,7 @@ func (b *Blaster) startStatsWriteLoop(ctx context.Context) {
 				b.println("Writing new metric data into writer")
 				var content = b.metrics.stats().String()
 				b.config.Metrics.Write([]byte(content))
+				b.config.Metrics.Write(newline)
 			case <-ctx.Done():
 				return
 			case <-b.hitSegmentFinishedChannel:

@@ -82,32 +82,6 @@ type Segment struct {
 	SubSegments        map[string][]*Segment
 }
 
-func (s Segment) Format(f Formatter) error {
-	if err := f.Format("DesiredRate", s.DesiredRate); err != nil {
-		return err
-	}
-	if err := f.Format("ActualRate", s.ActualRate); err != nil {
-		return err
-	}
-	if err := f.Format("AverageConcurrency", s.AverageConcurrency); err != nil {
-		return err
-	}
-	if err := f.Format("Duration", s.Duration); err != nil {
-		return err
-	}
-	if err := f.Under("Summary", s.Summary); err != nil {
-		return err
-	}
-
-	for _, status := range s.Status {
-		if err := f.Under(status.Status, status); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (m *metricsDef) stats() Stats {
 	m.sync.RLock()
 	defer m.sync.RUnlock()
@@ -120,16 +94,9 @@ func (m *metricsDef) stats() Stats {
 
 	// add some stats segments
 	for range m.segments {
-		var segment = Segment{
-			Summary:     &Total{},
-			SubSegments: map[string][]*Segment{},
-		}
-
-		for key, child := range m.sections {
-			segment.SubSegments[key] = make([]*Segment, 0, len(child.segments))
-		}
-
-		s.Segments = append(s.Segments, &segment)
+		s.Segments = append(s.Segments, &Segment{
+			Summary: &Total{},
+		})
 	}
 
 	// find all statuses and order
@@ -170,43 +137,6 @@ func (m *metricsDef) stats() Stats {
 		seg.Summary.Fail = m.segments[i].total.fail.Count()
 		seg.Summary.Mean = time.Duration(m.segments[i].total.finish.Mean()/1000000.0) * time.Millisecond
 		seg.Summary.NinetyFifth = time.Duration(m.segments[i].total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
-
-		for key, child := range m.sections {
-			subSegments := seg.SubSegments[key]
-
-			if metricChildSeg, ok := child.segments[i]; ok {
-				var cseg Segment
-				cseg.Summary = &Total{}
-
-				cseg.DesiredRate = metricChildSeg.rate
-				cseg.ActualRate = float64(metricChildSeg.total.start.Count()) / metricChildSeg.duration().Seconds()
-				cseg.AverageConcurrency = metricChildSeg.busy.Mean()
-				cseg.Duration = metricChildSeg.duration()
-				cseg.Summary.Started = metricChildSeg.total.start.Count()
-				cseg.Summary.Finished = metricChildSeg.total.finish.Count()
-				cseg.Summary.Success = metricChildSeg.total.success.Count()
-				cseg.Summary.Fail = metricChildSeg.total.fail.Count()
-				cseg.Summary.Mean = time.Duration(metricChildSeg.total.finish.Mean()/1000000.0) * time.Millisecond
-				cseg.Summary.NinetyFifth = time.Duration(metricChildSeg.total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
-
-				var csegStatus = map[string]*Status{}
-				for statusKey, statusItem := range metricChildSeg.status {
-					if _, ok := csegStatus[statusKey]; !ok {
-						var sem = &Status{Status: statusKey}
-						csegStatus[statusKey] = sem
-						cseg.Status = append(cseg.Status, sem)
-					}
-
-					var elem = csegStatus[statusKey]
-					elem.Count = statusItem.finish.Count()
-					elem.Fraction = float64(statusItem.finish.Count()) / float64(metricChildSeg.total.finish.Count())
-					elem.Mean = time.Duration(statusItem.finish.Mean()/1000000.0) * time.Millisecond
-					elem.NinetyFifth = time.Duration(statusItem.finish.Percentile(0.95)/1000000.0) * time.Millisecond
-				}
-
-				subSegments = append(subSegments, &cseg)
-			}
-		}
 	}
 
 	for statusIndex, status := range statuses {
@@ -233,8 +163,9 @@ func (s Stats) String() string {
 	buf := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buf, 0, 0, 2, ' ', 0)
 
+	fmt.Fprintf(w, "\n====================================================\n")
 	fmt.Fprintln(w, "Metrics")
-	fmt.Fprintln(w, "=======")
+	fmt.Fprintf(w, "====================================================\n")
 
 	var segments []int
 	for i := len(s.Segments) - 1; i >= 0; i-- {
@@ -347,6 +278,25 @@ func (s Stats) String() string {
 		}
 		fmt.Fprintf(w, "%s\n", tabs)
 	}
+
+	for index, seg := range s.Segments {
+		for subKey, subSeg := range seg.SubSegments {
+			fmt.Fprintf(w, "%s\n", tabs)
+			fmt.Fprintf(w, "%v%s\n", subKey, tabs)
+			fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(subKey)), tabs)
+
+			if len(subSeg) > index {
+				indexedSig := subSeg[index]
+				for _, status := range indexedSig.Status {
+					fmt.Fprintf(w, "%s\n", tabs)
+					fmt.Fprintf(w, "%v%s\n", status.Status, tabs)
+					fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(status.Status)), tabs)
+				}
+			}
+		}
+	}
+
+	fmt.Fprintf(w, "\n====================================================\n")
 	w.Flush()
 	return buf.String()
 }
