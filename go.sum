@@ -2,6 +2,8 @@ github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/francoispqt/gojay v0.0.0-20190117044300-106fcfa8bda0 h1:uBcHH1nuSsoKhhy+RFOumWyW3mlT0tQwDNgslh+Lx3c=
 github.com/francoispqt/gojay v0.0.0-20190117044300-106fcfa8bda0/go.mod h1:H8Wgri1Asi1VevY3ySdpIK5+KCpqzToVswNq8g2xZj4=
+github.com/lalamove/blitzkrieg v0.0.0-20190214084053-47e6e39c3b7e h1:478HI/X6A0ZjN+rF/HxqGtxDGvkXpMfBbrFh6lt7K+I=
+github.com/lalamove/blitzkrieg v0.0.0-20190214084053-47e6e39c3b7e/go.mod h1:6MUP9qsG6awBFxBt9mI9XO+3ZzCdrN713X852ySl4N8=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
