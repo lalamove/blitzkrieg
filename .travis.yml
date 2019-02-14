@@ -2,9 +2,7 @@ language: go
 go:
     - 1.x
 install:
-  - go get -u github.com/dave/courtney
   - go get -t -v ./...
 script:
-  - courtney -e
 after_success:
   - bash <(curl -s https://codecov.io/bash)
