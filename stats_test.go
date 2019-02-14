@@ -103,38 +103,9 @@ func TestStats_String(t *testing.T) {
 			},
 		},
 	}
-	expected := `Metrics
-=======
-No Response:      3 (Worker requests ending with no response)
-Concurrency:      1 / 2 workers in use
-                                                
-Desired rate:     (all)     39        22                
-Actual rate:      5         40        23                
-Avg concurrency:  6         41        24                
-Duration:         00:07     1:07:22   02:05             
-                                                
-Total                                           
------                                           
-Started:          8         43        26        
-Finished:         9         44        27        
-Success:          10        45        28        
-Fail:             11        46        29        
-Mean:             12.0 ms   47.0 ms   30.0 ms           
-95th:             13.0 ms   48.0 ms   31.0 ms           
-                                                
-a                                               
--                                               
-Count:            14 (15%)  49 (50%)  32 (33%)  
-Mean:             16.0 ms   51.0 ms   34.0 ms           
-95th:             17.0 ms   52.0 ms   35.0 ms           
-                                                
-b                                               
--                                               
-Count:            18 (19%)  0         36 (37%)  
-Mean:             20.0 ms   -         38.0 ms           
-95th:             21.0 ms   -         38.0 ms           
-`
 	if s.String() != expected {
 		t.Fatal("Unexpected stat string:", s.String())
 	}
 }
+
+const expected = "\n====================================================\nMetrics\n====================================================\nNo Response:      3 (Worker requests ending with no response) \nConcurrency:      1 / 2 workers in use\n                                                \nDesired rate:     (all)     39        22                \nActual rate:      5         40        23                \nAvg concurrency:  6         41        24                \nDuration:         00:07     1:07:22   02:05             \n                                                \nTotal                                           \n-----                                           \nStarted:          8         43        26        \nFinished:         9         44        27        \nSuccess:          10        45        28        \nFail:             11        46        29        \nMean:             12.0 ms   47.0 ms   30.0 ms           \n95th:             13.0 ms   48.0 ms   31.0 ms           \n                                                \na                                               \n-                                               \nCount:            14 (15%)  49 (50%)  32 (33%)  \nMean:             16.0 ms   51.0 ms   34.0 ms           \n95th:             17.0 ms   52.0 ms   35.0 ms           \n                                                \nb                                               \n-                                               \nCount:            18 (19%)  0         36 (37%)  \nMean:             20.0 ms   -         38.0 ms           \n95th:             21.0 ms   -         38.0 ms           \n\n====================================================\n"
