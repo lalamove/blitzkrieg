@@ -2,7 +2,7 @@ language: go
 go:
     - 1.x
 install:
-  - env GO111MODULE=on go get -t -v ./...
+  - go get -t -v ./...
 script:
   - ./test.sh
 after_success:
