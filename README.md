@@ -1,9 +1,11 @@
+[![Build Status](https://travis-ci.org/gokit/blitzkrieg.svg?branch=master)](https://travis-ci.org/gokit/blitzkrieg) [![Go Report Card](https://goreportcard.com/badge/github.com/gokit/blitzkrieg)](https://goreportcard.com/report/github.com/gokit/blitzkrieg) [![codecov](https://codecov.io/gh/gokit/blitzkrieg/branch/master/graph/badge.svg)](https://codecov.io/gh/gokit/blitzkrieg)
+
 Blitzkrieg
 ==========
-Blitzkrieg is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [blast](https://github.com/dave/blast/).
+Blitzkrieg is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [blast](https://github.com/gokit/blitzkrieg/).
 
 Blitzkrieg builds solid foundation for building custom load testers with custom logic and behaviour yet with the 
-statistical foundation provided in [blast](https://github.com/dave/blast/), for extensive details on the performance
+statistical foundation provided in [blast](https://github.com/gokit/blitzkrieg/), for extensive details on the performance
 of a API target. 
 
  * Blitzkrieg makes API requests at a fixed rate.
