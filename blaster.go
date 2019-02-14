@@ -180,6 +180,8 @@ func (b *Blaster) Start(ctx context.Context, c Config) (Stats, error) {
 		return Stats{}, err
 	}
 
+	b.setTimeout(b.config.Timeout)
+
 	hit, ok := b.getCurrentSegment()
 	if !ok {
 		return Stats{}, errors.New("No attached HitSegment test")
@@ -294,14 +296,14 @@ func (b *Blaster) start(ctx context.Context) error {
 	return nil
 }
 
-// SetTimeout sets the timeout. See Config.Timeout for more details.
-func (b *Blaster) SetTimeout(timeout time.Duration) {
+// setTimeout sets the timeout. See Config.Timeout for more details.
+func (b *Blaster) setTimeout(timeout time.Duration) {
 	b.softTimeout = timeout
 	b.hardTimeout = timeout + time.Second
 }
 
-// SetWorker sets the worker creation function. See httpworker for a simple example.
-func (b *Blaster) SetWorker(wf func() Worker) {
+// setWorker sets the worker creation function. See httpworker for a simple example.
+func (b *Blaster) setWorker(wf func() Worker) {
 	b.config.WorkerFunc = wf
 }
 
