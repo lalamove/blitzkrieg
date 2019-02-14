@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/gokit/blitzkrieg"
+	"github.com/lalamove/blitzkrieg"
 )
 
 //*************************************

@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/gokit/blitzkrieg.svg?branch=master)](https://travis-ci.org/gokit/blitzkrieg) [![Go Report Card](https://goreportcard.com/badge/github.com/gokit/blitzkrieg)](https://goreportcard.com/report/github.com/gokit/blitzkrieg) [![codecov](https://codecov.io/gh/gokit/blitzkrieg/branch/master/graph/badge.svg)](https://codecov.io/gh/gokit/blitzkrieg)
+[![Build Status](https://travis-ci.org/gokit/blitzkrieg.svg?branch=master)](https://travis-ci.org/gokit/blitzkrieg) [![Go Report Card](https://goreportcard.com/badge/github.com/lalamove/blitzkrieg)](https://goreportcard.com/report/github.com/lalamove/blitzkrieg) [![codecov](https://codecov.io/gh/gokit/blitzkrieg/branch/master/graph/badge.svg)](https://codecov.io/gh/gokit/blitzkrieg)
 
 Blitzkrieg
 ==========
@@ -16,7 +16,7 @@ of a API target.
  ## From source
  
  ```
- go get -u github.com/gokit/blitzkrieg
+ go get -u github.com/lalamove/blitzkrieg
  ```
 
  Status
@@ -92,9 +92,109 @@ Mean:                                 100.0 ms    100.0 ms   104.0 ms  105.0 ms
 ```
 
 
+## Configuration
 
-Worker API
-==========
+Blitzkrieg expects the following configuration values which do have set defaults during
+it's use, see below:
+
+```go
+type Config struct {
+	// WorkerFunc is responsible for generating workers for a load-test suite.
+	WorkerFunc WorkerFunc
+
+	// OnNextSegment sets a function to be executed once a new segment has begun.
+	OnNextSegment func(HitSegment)
+
+	// SegmentedEnded sets a function to be executed once a segment has finished.
+	OnSegmentEnd func(HitSegment)
+
+	// OnEachRun sets a function to be called on every finished execution of a giving
+	// worker's request work. This way you get access to the current stat, worker id
+	// and worker context used within a single instance run of a segment run.
+	//
+	// Note this is called for every completion of an individual request, so if you
+	// set a HitSegment.MaxHits of 1000, then this would be called 1000 times.
+	OnEachRun func(workerId int, workerContext *WorkerContext, stat Stats)
+
+	// DefaultHeaders contains default headers that all workers must include
+	// in their requests.
+	//
+	// All header values are copied/appended into the initial content of a worker start
+	// WorkerContext, but it will append all header values into existing key
+	// found in the WorkerContext returned by the Worker.Start method call.
+	DefaultHeaders map[string][]string
+
+	// DefaultParams contains default params that all workers must include
+	// in their requests.
+	//
+	// All parameters are copied into the initial content of a worker start
+	// WorkerContext, but it will not replace any key already provided for
+	// if found in the WorkerContext returned by the Worker.Start method call.
+	DefaultParams map[string]string
+
+	// Log sets the io.Writer to write internal blaster logs into.
+	Log io.Writer
+
+	// Metrics sets the io.Writer to write period stats of blaster into.
+	Metrics io.Writer
+
+	// PeriodicWrite sets the intervals at which the current stats of the
+	// blaster is written into the Config.Metrics writer.
+	// ( Defaults: 5 second ).
+	PeriodicWrite time.Duration
+
+	// Segments sets the sampling size and total different blast segments
+	// rates and max hits per segment. This allows us to provide a slice of
+	// different hit rates to test targets with.
+	Segments []HitSegment
+
+	// Workers sets the number of concurrent workers. (Default: 10 workers).
+	Workers int
+
+	// Timeout sets the deadline in the context passed to the worker. Workers must respect this the context cancellation.
+	// We exit with an error if any worker is processing for timeout + 1 second.
+	// (Default: 1 second).
+	Timeout time.Duration
+
+	// Endless sets whether the blaster should still continue working, if it has exhausted
+	// it's segments list. This allows us dynamically deliver new segments to be delivered
+	// into a current running blaster.
+	Endless bool
+}
+```
+
+## HitSegments
+
+Blitzkrieg provides [HitSegment](https://github.com/lalamove/blitzkrieg/blob/master/blaster.go#L39-L48), which are you means 
+of configuring how your load test workers are used. Each HitSegment is basically a giving rate of maximum 
+requests we wish to hit against our target, where Blitzkrieg will collect the response, and behaviour statistics
+of our target during such a segment. This allows us create a list of desirable and non-desirable hit segments which 
+can be used to test the behaviour of our target during what we consider a healthy rate or an unhealthy rate.
+
+```go
+type HitSegment struct {
+	// Rate sets the initial rate in requests per second.
+	// (Default: 10 requests / second).
+	Rate float64
+
+	// MaxHits sets the maximum amount of hits per the rate value
+	// which this segment will run.
+	// (Defaults: 1000).
+	MaxHits int
+}
+```
+
+It provides 3 configuration parameters:
+
+- `Rate` sets the maximum number of request is to be made per second
+
+- `MaxHits` sets the maximum number of hits we wish to make against a target.
+
+Where once the count of `MaxHits` as being made, then a `HitSegment` is considered done.
+
+
+
+## Worker API
 
 Blitzkrieg Worker interface allows Blitzkrieg to support your custom load testing strategies. 
 
@@ -113,10 +213,11 @@ func sampleWorker() blitzkriege.Worker {
 ```
 
 
-## Worker Examples
+### Worker Examples
+
 See Worker interface implementation examples below:
 
-### Single Request Worker  
+#### Single Request Worker  
 
 This is where a single request is to be made to hit at our target as defined by us. This worker
 will be called to repeatedly prepare it's payload and then we measure how long it takes for it 
@@ -196,7 +297,7 @@ func (e *LalaWorker) Stop(ctx context.Context) error {
 }
 ```
 
-### Group/Sequence Request Worker
+#### Group/Sequence Request Worker
 
 This is where your load test spans multiple requests, where each makes up the single operation 
 you wish to validate it's behaviour, using the `WorkerContext.FromContext` which branches of 
@@ -289,87 +390,51 @@ func (e *LalaWorker) Stop(ctx context.Context) error {
 }
 ```
 
-### More Examples
+## Example
+
 
 ```go
-ctx, cancel := context.WithCancel(context.Background())
-b := blitzkrieg.New(ctx, cancel)
-defer b.Exit()
+blits := blitzkrieg.New()
 
-b.SetWorker(func() blitzkrieg.Worker {
-	return &blitzkrieg.FunctionWorker{
-		SendFunc: func(ctx context.Context, workerCtx *blistskrieg.WorkerContext) error {
-			workerCtx.SetResponse(blitzkrieg.Stringify(200),blitzkrieg.Payload{}, nil)
-			return nil
+stats, err := blits.Start(context.Background(), blitzkrieg.Config{
+	Segments: []blitzkrieg.HitSegment{
+		{
+			Rate:    10, // request each X second
+			MaxHits: 50,
 		},
-		Prepare: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
-			var payload blitskrieg.Payload
-			payload.Headers = []string{"header"}
-			payload.SetData(strings.NewReader("foo\nbar"))
-			return blitzkrieg.NewWorkerContext("some-text", payload, nil)
-		}
-	}
-})
+		{
+			Rate:    15, //  request per X second
+			MaxHits: 100,
+		},
+		{
+			Rate:    20, //  request per X second
+			MaxHits: 1000,
+		},
+	},
+	Metrics:       os.Stdout,
+	PeriodicWrite: time.Second * 3,
+	WorkerFunc: func() blitzkrieg.Worker {
+		return &blitzkrieg.FunctionWorker{
+			PrepareFunc: func(ctx context.Context) (workerContext *blitzkrieg.WorkerContext, e error) {
+				return blitzkrieg.NewWorkerContext("hello-service", blitzkrieg.Payload{}, nil), nil
+			},
+			SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(300)))
 
-stats, err := b.Prepare(ctx, blitskrieg.Config{
-	Rate: 1000,
+				sub := workerCtx.FromContext("sub-service-call", blitzkrieg.Payload{}, nil)
+				if err := callSecondService(sub); err != nil {
+					return err
+				}
+
+				return callSecondService(workerCtx)
+			},
+		}
+	},
 })
 
 if err != nil {
-	fmt.Println(err.Error())
-	return
+	fmt.Printf("Load testing ended with an error: %+s", err)
 }
 
-fmt.Printf("Success == 2: %v\n", stats.All.Summary.Success == 2)
-fmt.Printf("Fail == 0: %v", stats.All.Summary.Fail == 0)
-// Output:
-// Success == 2: true
-// Fail == 0: true
+fmt.Printf("Final Stats:\n\n %+s\n", stats.String())
 ```
-
-```go
-ctx, cancel := context.WithCancel(context.Background())
-b := blitzkrieg.New(ctx, cancel)
-defer b.Exit()
-
-b.SetWorker(func() blitzkrieg.Worker {
-	return &blitzkrieg.FunctionWorker{
-		SendFunc: func(ctx context.Context, workerCtx *blistskrieg.WorkerContext) error {
-			workerCtx.SetResponse(blitzkrieg.Stringify(200),blitzkrieg.Payload{}, nil)
-			return nil
-		},
-		Prepare: func(ctx context.Context) (*blitzkireg.WorkerContext, error){
-			var payload blitskrieg.Payload
-			payload.Headers = []string{"header"}
-			payload.SetData(strings.NewReader("foo\nbar"))
-			return blitzkrieg.NewWorkerContext("some-text", payload, nil)
-		}
-	}
-})
-
-wg := &sync.WaitGroup{}
-wg.Add(1)
-
-go func() {
-	stats, err := b.Prepare(ctx, blitskrieg.Config{
-		Rate: 1000,
-	})
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	fmt.Printf("Success > 10: %v\n", stats.All.Summary.Success > 10)
-	fmt.Printf("Fail == 0: %v", stats.All.Summary.Fail == 0)
-	wg.Done()
-}()
-
-<-time.After(time.Millisecond * 100)
-b.Exit()
-
-wg.Wait()
-
-// Output:
-// Success > 10: true
-// Fail == 0: true
-```
- 

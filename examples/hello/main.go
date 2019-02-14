@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gokit/blitzkrieg"
+	"github.com/lalamove/blitzkrieg"
 )
 
 var (

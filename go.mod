@@ -1,4 +1,4 @@
-module github.com/gokit/blitzkrieg
+module github.com/lalamove/blitzkrieg
 
 require (
 	github.com/francoispqt/gojay v0.0.0-20190117044300-106fcfa8bda0
