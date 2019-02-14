@@ -653,7 +653,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			ticker.Stop()
 		}
 
-		ticksPerSecond := currentSegment.Rate / float64(currentSegment.MaxHits)
+		ticksPerSecond := currentSegment.Rate
 		ticksPerMs := ticksPerSecond / 1000.0
 		ticksPerUs := ticksPerMs / 1000.0
 		ticksPerNs := ticksPerUs / 1000.0
