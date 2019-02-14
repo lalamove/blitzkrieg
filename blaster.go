@@ -472,7 +472,8 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 	}
 }
 
-const contextErrorMessage = "a worker was still sending after timeout + 1 second. This indicates a bug in the worker code. Workers should immediately exit on receiving a signal from ctx.Done()"
+const contextErrorMessage = "a worker was still sending after timeout + 1 second. This indicates a bug in the worker code." +
+	" Workers should immediately exit on receiving a signal from ctx.Done()"
 
 func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID int, hit HitSegment) error {
 	b.metrics.logStart(segmentID)
