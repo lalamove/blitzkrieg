@@ -165,7 +165,7 @@ type Config struct {
 
 ## HitSegments
 
-Blitzkrieg provides [HitSegment](https://github.com/lalamove/blitzkrieg/blob/master/blaster.go#L39-L48), which are you means 
+Blitzkrieg provides [HitSegments](https://github.com/lalamove/blitzkrieg/blob/master/blaster.go#L39-L48), which are you means 
 of configuring how your load test workers are used. Each HitSegment is basically a giving rate of maximum 
 requests we wish to hit against our target, where Blitzkrieg will collect the response, and behaviour statistics
 of our target during such a segment. This allows us create a list of desirable and non-desirable hit segments which 
