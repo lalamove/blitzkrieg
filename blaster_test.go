@@ -328,7 +328,7 @@ func TestBlasterAddHitSegmentAfterFinishedSegment(t *testing.T) {
 		defer r.Done()
 
 		_, err := blits.Start(context.Background(), blitzkrieg.Config{
-			Workers: 2,
+			Workers: 5,
 			Endless: true,
 			OnSegmentEnd: func(_ blitzkrieg.HitSegment) {
 				w.Done()
@@ -359,7 +359,9 @@ func TestBlasterAddHitSegmentAfterFinishedSegment(t *testing.T) {
 	blits.Exit()
 
 	r.Wait()
-	require.Equal(t, 20, int(hit.hits))
+
+	var hits = int(hit.hits)
+	require.Equal(t, 20, hits)
 	require.Len(t, errChan, 1)
 	require.Nil(t, <-errChan)
 }
