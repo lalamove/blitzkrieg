@@ -2,10 +2,10 @@
 
 Blitzkrieg
 ==========
-Blitzkrieg is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [blast](https://github.com/gokit/blitzkrieg/).
+Blitzkrieg is a refactoring of [Dave Cheney](https://github.com/dave)'s work on [blast](https://github.com/dave/blast/).
 
 Blitzkrieg builds solid foundation for building custom load testers with custom logic and behaviour yet with the 
-statistical foundation provided in [blast](https://github.com/gokit/blitzkrieg/), for extensive details on the performance
+statistical foundation provided in [blast](https://github.com/dave/blast/), for extensive details on the performance
 of a API target. 
 
  * Blitzkrieg makes API requests at a fixed rate.
@@ -64,9 +64,6 @@ of a API target.
  Mean:             371.2 ms     370.4 ms     374.5 ms     374.3 ms
  95th:             487.6 ms     487.1 ms     488.2 ms     466.3 ms
 
- Current rate is 10000 requests / second. Enter a new rate or press enter to view status.
-
- Rate?
  ```
 
 

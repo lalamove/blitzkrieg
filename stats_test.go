@@ -105,7 +105,7 @@ func TestStats_String(t *testing.T) {
 	}
 	expected := `Metrics
 =======
-Skipped:          3 from previous runs
+No Response:      3 from previous runs
 Concurrency:      1 / 2 workers in use
                                                 
 Desired rate:     (all)     39        22                
