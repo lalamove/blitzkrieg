@@ -48,15 +48,15 @@ stats, err := blits.Start(context.Background(), blitzkrieg.Config{
 			PrepareFunc: func(ctx context.Context) (workerContext *blitzkrieg.WorkerContext, e error) {
 				return blitzkrieg.NewWorkerContext("hello-service", blitzkrieg.Payload{}, nil), nil
 			},
-			SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
+			SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext)  {
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(300)))
 
 				sub := workerCtx.FromContext("sub-service-call", blitzkrieg.Payload{}, nil)
 				if err := callSecondService(sub); err != nil {
-					return err
+					return 
 				}
 
-				return callSecondService(workerCtx)
+				callSecondService(workerCtx)
 			},
 		}
 	},
