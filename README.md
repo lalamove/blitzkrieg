@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/gokit/blitzkrieg.svg?branch=master)](https://travis-ci.org/gokit/blitzkrieg) [![Go Report Card](https://goreportcard.com/badge/github.com/lalamove/blitzkrieg)](https://goreportcard.com/report/github.com/lalamove/blitzkrieg) [![codecov](https://codecov.io/gh/gokit/blitzkrieg/branch/master/graph/badge.svg)](https://codecov.io/gh/gokit/blitzkrieg)
+[![Build Status](https://travis-ci.org/lalamove/blitzkrieg.svg?branch=master)](https://travis-ci.org/lalamove/blitzkrieg) [![Go Report Card](https://goreportcard.com/badge/github.com/lalamove/blitzkrieg)](https://goreportcard.com/report/github.com/lalamove/blitzkrieg) [![codecov](https://codecov.io/gh/lalamove/blitzkrieg/branch/master/graph/badge.svg)](https://codecov.io/gh/lalamove/blitzkrieg)
 
 Blitzkrieg
 ==========
