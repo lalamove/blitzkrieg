@@ -244,23 +244,6 @@ func (s Stats) String() string {
 		fmt.Fprintf(w, "%s\n", tabs)
 	}
 
-	for index, seg := range s.Segments {
-		for subKey, subSeg := range seg.SubSegments {
-			fmt.Fprintf(w, "%s\n", tabs)
-			fmt.Fprintf(w, "%v%s\n", subKey, tabs)
-			fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(subKey)), tabs)
-
-			if len(subSeg) > index {
-				indexedSig := subSeg[index]
-				for _, status := range indexedSig.Status {
-					fmt.Fprintf(w, "%s\n", tabs)
-					fmt.Fprintf(w, "%v%s\n", status.Status, tabs)
-					fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(status.Status)), tabs)
-				}
-			}
-		}
-	}
-
 	fmt.Fprintf(w, "\n====================================================\n")
 	w.Flush()
 	return buf.String()
