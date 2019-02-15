@@ -18,7 +18,7 @@ type metricsDef struct {
 	config   *Config
 }
 
-func newMetricsDef(c *Config, hit HitSegment) *metricsDef {
+func newMetricsDef(c *Config, hit *HitSegment) *metricsDef {
 	r := metrics.NewRegistry()
 	m := &metricsDef{
 		registry: r,
@@ -68,7 +68,7 @@ func (m *metricsDef) logSegmentFinish(segment int, status string, elapsed time.D
 	m.segments[segment].logChildFinish(status, elapsed, success)
 }
 
-func (m *metricsDef) addSegment(rate HitSegment) {
+func (m *metricsDef) addSegment(rate *HitSegment) {
 	m.sync.Lock()
 	defer m.sync.Unlock()
 	if len(m.segments) > 0 {
@@ -87,11 +87,10 @@ func (m *metricsDef) newMetricsItem() *metricsItem {
 	}
 }
 
-func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
+func (m *metricsDef) newMetricsSegment(hit *HitSegment) *metricsSegment {
 	return &metricsSegment{
 		def:    m,
 		hit:    hit,
-		rate:   hit.Rate,
 		total:  m.newMetricsItem(),
 		status: map[string]*metricsItem{},
 		busy:   metrics.NewRegisteredHistogram("busy", m.registry, metrics.NewExpDecaySample(1028, 0.015)),
@@ -102,8 +101,7 @@ func (m *metricsDef) newMetricsSegment(hit HitSegment) *metricsSegment {
 type metricsSegment struct {
 	sync  sync.RWMutex
 	def   *metricsDef
-	hit   HitSegment
-	rate  float64
+	hit   *HitSegment
 	busy  metrics.Histogram
 	total *metricsItem
 	start time.Time
@@ -113,10 +111,7 @@ type metricsSegment struct {
 }
 
 func (m *metricsSegment) duration() time.Duration {
-	if m.end == (time.Time{}) {
 		return time.Since(m.start)
-	}
-	return m.end.Sub(m.start)
 }
 
 func (m *metricsSegment) logStart() {
@@ -167,23 +162,3 @@ type metricsItem struct {
 	fail    metrics.Counter
 }
 
-type childSegment struct {
-	root     *metricsDef
-	segments map[int]*metricsSegment
-	key      string
-}
-
-func (c *childSegment) addSegment(segment int, hit HitSegment) {
-	if _, ok := c.segments[segment]; !ok {
-
-		var seg = c.root.newMetricsSegment(hit)
-		c.segments[segment] = seg
-	}
-}
-
-func (c *childSegment) getSegment(segment int) *metricsSegment {
-	if seg, ok := c.segments[segment]; ok {
-		return seg
-	}
-	return nil
-}

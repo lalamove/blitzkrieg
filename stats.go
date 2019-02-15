@@ -9,22 +9,6 @@ import (
 	"time"
 )
 
-// Formattable defines a interface which provides a method to accept
-// a Formatter.
-type Formattable interface {
-	Format(Formatter) error
-}
-
-// Formatter defines a interface which exposes methods to
-// format a underline key-value pair and cases of sub fields
-// which must implement the Formattable interface.
-type Formatter interface {
-	Format(key string, value interface{}) error
-
-	List(key string, set []Formattable) error
-	Under(key string, formattable Formattable) error
-}
-
 // Stats is a snapshot of the metrics (as is printed during interactive execution).
 type Stats struct {
 	ConcurrencyCurrent int
@@ -44,11 +28,6 @@ type Total struct {
 	NinetyFifth time.Duration
 }
 
-func (t Total) Format(f Formatter) error {
-
-	return nil
-}
-
 // Status is a summary of all requests that returned a specific status
 type Status struct {
 	Status      string
@@ -56,19 +35,6 @@ type Status struct {
 	Fraction    float64
 	Mean        time.Duration
 	NinetyFifth time.Duration
-}
-
-func (s Status) Format(f Formatter) error {
-	if err := f.Format("Status", s.Status); err != nil {
-		return err
-	}
-	if err := f.Format("Count", s.Count); err != nil {
-		return err
-	}
-	if err := f.Format("Fraction", s.Fraction); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Segment is a rate segment - a new segment is created each time the rate is changed.
@@ -79,7 +45,6 @@ type Segment struct {
 	Duration           time.Duration
 	Summary            *Total
 	Status             []*Status
-	SubSegments        map[string][]*Segment
 }
 
 func (m *metricsDef) stats() Stats {
@@ -127,7 +92,7 @@ func (m *metricsDef) stats() Stats {
 	s.All.Summary.NinetyFifth = time.Duration(m.all.total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
 
 	for i, seg := range s.Segments {
-		seg.DesiredRate = m.segments[i].rate
+		seg.DesiredRate = m.segments[i].hit.Rate
 		seg.ActualRate = float64(m.segments[i].total.start.Count()) / m.segments[i].duration().Seconds()
 		seg.AverageConcurrency = m.segments[i].busy.Mean()
 		seg.Duration = m.segments[i].duration()
@@ -181,20 +146,20 @@ func (s Stats) String() string {
 	fmt.Fprintf(w, "Concurrency:\t%d / %d workers in use\n", s.ConcurrencyCurrent, s.ConcurrencyMaximum)
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Desired rate:\t(all)\t")
+	fmt.Fprint(w, "Desired rate (Per Second):\t(all)\t")
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].DesiredRate)
 	}
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Actual rate:\t")
+	fmt.Fprint(w, "Actual rate  (Per Second):\t")
 	fmt.Fprintf(w, "%.0f\t", s.All.ActualRate)
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].ActualRate)
 	}
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Avg concurrency:\t")
+	fmt.Fprint(w, "Avg concurrency (Active):\t")
 	fmt.Fprintf(w, "%.0f\t", s.All.AverageConcurrency)
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].AverageConcurrency)
@@ -277,23 +242,6 @@ func (s Stats) String() string {
 			}
 		}
 		fmt.Fprintf(w, "%s\n", tabs)
-	}
-
-	for index, seg := range s.Segments {
-		for subKey, subSeg := range seg.SubSegments {
-			fmt.Fprintf(w, "%s\n", tabs)
-			fmt.Fprintf(w, "%v%s\n", subKey, tabs)
-			fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(subKey)), tabs)
-
-			if len(subSeg) > index {
-				indexedSig := subSeg[index]
-				for _, status := range indexedSig.Status {
-					fmt.Fprintf(w, "%s\n", tabs)
-					fmt.Fprintf(w, "%v%s\n", status.Status, tabs)
-					fmt.Fprintf(w, "%s%s\n", strings.Repeat("-", len(status.Status)), tabs)
-				}
-			}
-		}
 	}
 
 	fmt.Fprintf(w, "\n====================================================\n")

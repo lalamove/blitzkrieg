@@ -22,34 +22,36 @@ func main() {
 	stats, err := blits.Start(context.Background(), blitzkrieg.Config{
 		Segments: []blitzkrieg.HitSegment{
 			{
-				Rate:    10, // request each X second
-				MaxHits: 50,
+				Rate:    1000, // request each X second
+				MaxHits: 500,
 			},
 			{
-				Rate:    15, //  request per X second
-				MaxHits: 100,
-			},
-			{
-				Rate:    20, //  request per X second
+				Rate:    1500, //  request per X second
 				MaxHits: 1000,
 			},
+			{
+				Rate:    2000, //  request per X second
+				MaxHits: 1500,
+			},
 		},
+		Workers: 200,
 		Metrics:       os.Stdout,
 		PeriodicWrite: time.Second * 3,
+		Timeout: 5 * time.Second,
 		WorkerFunc: func() blitzkrieg.Worker {
 			return &blitzkrieg.FunctionWorker{
 				PrepareFunc: func(ctx context.Context) (workerContext *blitzkrieg.WorkerContext, e error) {
 					return blitzkrieg.NewWorkerContext("hello-service", blitzkrieg.Payload{}, nil), nil
 				},
-				SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
-					time.Sleep(time.Millisecond * time.Duration(rand.Intn(300)))
+				SendFunc: func(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) {
+					time.Sleep(time.Millisecond * time.Duration(rand.Intn(300) * 3))
 
 					sub := workerCtx.FromContext("sub-service-call", blitzkrieg.Payload{}, nil)
 					if err := callSecondService(sub); err != nil {
-						return err
+						return
 					}
 
-					return callSecondService(workerCtx)
+					callSecondService(workerCtx)
 				},
 			}
 		},

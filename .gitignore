@@ -30,3 +30,7 @@ _testmain.go
 coverage.out
 out.log
 dist/
+debug.test
+coverage.out
+vendor/*
+**/**/*.out

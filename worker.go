@@ -48,7 +48,7 @@ type Worker interface {
 	// You only make request for a single or set of requests for just one call to your
 	// service title. Blitzkrieg handles concurrent hits to your title by calling
 	// multiple versions of your worker.
-	Send(ctx context.Context, workerCtx *WorkerContext) error
+	Send(ctx context.Context, workerCtx *WorkerContext)
 }
 
 // Starter is an interface a worker can optionally satisfy to provide initialization logic.
@@ -70,15 +70,15 @@ type FunctionWorker struct {
 	StopFunc    func(ctx context.Context) error
 	StartFunc   func(ctx context.Context) error
 	PrepareFunc func(ctx context.Context) (*WorkerContext, error)
-	SendFunc    func(ctx context.Context, workerCtx *WorkerContext) error
+	SendFunc    func(ctx context.Context, workerCtx *WorkerContext)
 }
 
 // Send satisfies the Worker interface.
-func (e *FunctionWorker) Send(ctx context.Context, lastWctx *WorkerContext) error {
+func (e *FunctionWorker) Send(ctx context.Context, lastWctx *WorkerContext) {
 	if e.SendFunc == nil {
-		return nil
+		return
 	}
-	return e.SendFunc(ctx, lastWctx)
+	e.SendFunc(ctx, lastWctx)
 }
 
 // Prepare satisfies the Worker interface.
@@ -246,7 +246,7 @@ func requestWorkerContext(title string, req Payload, meta interface{}, last *Wor
 	return w
 }
 
-// ParentContext returns parent worker context from where it
+// LastContext returns parent worker context from where it
 // is derived from. A root WorkerContext never has a parent.
 func (w *WorkerContext) LastContext() *WorkerContext {
 	return w.parent
