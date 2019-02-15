@@ -14,7 +14,6 @@ of a API target.
  * Blitzkrieg makes API requests at a fixed rate.
  * The number of concurrent workers is configurable.
  * The worker API allows custom protocols or logic for how a target get's tested
- * Blitzkrieg builds a solid foundation for custom load testers.
 
 ## From source
 
@@ -74,8 +73,8 @@ fmt.Printf("Final Stats:\n\n %+s\n", stats.String())
 
 ### Status
 
-Blitzkrieg prints a summary the following summary through it's `Stats` object which is accessible 
-during each worker's call or at the end of all hit segemnts. 
+Blitzkrieg prints a summary through it's `Stats` object, which is accessible 
+during each worker's call or at the end of all hit segments. 
 
 Here's an example of the output: (See [Hello](./examples/hello/main.go) for code)
 
