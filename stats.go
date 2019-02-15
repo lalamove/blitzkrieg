@@ -45,7 +45,6 @@ type Segment struct {
 	Duration           time.Duration
 	Summary            *Total
 	Status             []*Status
-	SubSegments        map[string][]*Segment
 }
 
 func (m *metricsDef) stats() Stats {
