@@ -182,10 +182,10 @@ type Config struct {
 	// if found in the WorkerContext returned by the Worker.Prepare method call.
 	DefaultParams map[string]string
 
-	// Log sets the io.Writer to write internal blaster logs into.
+	// Log sets the Writer to write internal blaster logs into.
 	Log io.Writer
 
-	// Metrics sets the io.Writer to write period stats of blaster into.
+	// Metrics sets the Writer to write periodic stats of blaster into.
 	Metrics io.Writer
 
 	// PeriodicWrite sets the intervals at which the current stats of the
