@@ -164,7 +164,7 @@ func TestWorkerWithoutWorkerContext(t *testing.T) {
 					},
 					SendFunc: func(ctx context.Context, lastWctx *blitzkrieg.WorkerContext) {
 						select {
-							
+						
 						}
 					},
 				}
