@@ -59,18 +59,18 @@ func (hs *HitSegment) init() {
 
 // Config provides all the standard config options. Use the Initialise method to configure with a provided Config.
 type Config struct {
-	// WorkerFunc is responsible for generating workers for a load-test suite.
+	// WorkerFunc is responsible for generating workers for load-testing.
 	WorkerFunc WorkerFunc
 
-	// OnNextSegment sets a function to be executed once a new segment has begun.
+	// OnNextSegment sets a function to be executed once a new hit segment has begun.
 	OnNextSegment func(HitSegment)
 
-	// SegmentedEnded sets a function to be executed once a segment has finished.
+	// SegmentedEnded sets a function to be executed once a hit segment has finished.
 	OnSegmentEnd func(HitSegment)
 
 	// OnEachRun sets a function to be called on every finished execution of a giving
-	// worker's request work. This way you get access to the current stat, worker id
-	// and worker context used within a single instance run of a segment run.
+	// worker's request. This way you get access to the current Stats, worker id
+	// and worker context used within a single run of a hit segment.
 	//
 	// Note this is called for every completion of an individual request, so if you
 	// set a HitSegment.MaxHits of 1000, then this would be called 1000 times.
@@ -79,17 +79,19 @@ type Config struct {
 	// DefaultHeaders contains default headers that all workers must include
 	// in their requests.
 	//
-	// All header values are copied/appended into the initial content of a worker start
-	// WorkerContext, but it will append all header values into existing key
-	// found in the WorkerContext returned by the Worker.Start method call.
+	// All header values are copied/appended into the initial content of a worker
+	// WorkerContext, if an existing header is found then it will append default
+	// header values into key header list.
+	//
+	// The header is also returned by the call to Worker.Prepare.
 	DefaultHeaders map[string][]string
 
 	// DefaultParams contains default params that all workers must include
 	// in their requests.
 	//
 	// All parameters are copied into the initial content of a worker start
-	// WorkerContext, but it will not replace any key already provided for
-	// if found in the WorkerContext returned by the Worker.Start method call.
+	// WorkerContext, but it will not replace any key already provided for,
+	// if found in the WorkerContext returned by the Worker.Prepare method call.
 	DefaultParams map[string]string
 
 	// Log sets the io.Writer to write internal blaster logs into.
@@ -104,14 +106,15 @@ type Config struct {
 	PeriodicWrite time.Duration
 
 	// Segments sets the sampling size and total different blast segments
-	// rates and max hits per segment. This allows us to provide a slice of
-	// different hit rates to test targets with.
+	// rates and max hits which will be used for each worker.
 	Segments []HitSegment
 
-	// Workers sets the number of concurrent workers. (Default: 10 workers).
+	// Workers sets the number of concurrent workers to be used.
+	// (Default: 10 workers).
 	Workers int
 
-	// Timeout sets the deadline in the context passed to the worker. Workers must respect this the context cancellation.
+	// Timeout sets the deadline in the context passed to the worker. Workers must
+	// respect the context cancellation.
 	// We exit with an error if any worker is processing for timeout + 1 second.
 	// (Default: 1 second).
 	Timeout time.Duration
@@ -520,11 +523,7 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 	finished := make(chan struct{})
 
 	go func() {
-		if err := w.Send(child, newWorkContext); err != nil {
-			if newWorkContext.workerErr == nil {
-				newWorkContext.workerErr = err
-			}
-		}
+		w.Send(child, newWorkContext)
 		close(finished)
 	}()
 
