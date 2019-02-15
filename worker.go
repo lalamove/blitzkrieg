@@ -246,7 +246,7 @@ func requestWorkerContext(title string, req Payload, meta interface{}, last *Wor
 	return w
 }
 
-// ParentContext returns parent worker context from where it
+// LastContext returns parent worker context from where it
 // is derived from. A root WorkerContext never has a parent.
 func (w *WorkerContext) LastContext() *WorkerContext {
 	return w.parent
