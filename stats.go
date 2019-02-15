@@ -9,22 +9,6 @@ import (
 	"time"
 )
 
-// Formattable defines a interface which provides a method to accept
-// a Formatter.
-type Formattable interface {
-	Format(Formatter) error
-}
-
-// Formatter defines a interface which exposes methods to
-// format a underline key-value pair and cases of sub fields
-// which must implement the Formattable interface.
-type Formatter interface {
-	Format(key string, value interface{}) error
-
-	List(key string, set []Formattable) error
-	Under(key string, formattable Formattable) error
-}
-
 // Stats is a snapshot of the metrics (as is printed during interactive execution).
 type Stats struct {
 	ConcurrencyCurrent int
@@ -44,11 +28,6 @@ type Total struct {
 	NinetyFifth time.Duration
 }
 
-func (t Total) Format(f Formatter) error {
-
-	return nil
-}
-
 // Status is a summary of all requests that returned a specific status
 type Status struct {
 	Status      string
@@ -56,19 +35,6 @@ type Status struct {
 	Fraction    float64
 	Mean        time.Duration
 	NinetyFifth time.Duration
-}
-
-func (s Status) Format(f Formatter) error {
-	if err := f.Format("Status", s.Status); err != nil {
-		return err
-	}
-	if err := f.Format("Count", s.Count); err != nil {
-		return err
-	}
-	if err := f.Format("Fraction", s.Fraction); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Segment is a rate segment - a new segment is created each time the rate is changed.

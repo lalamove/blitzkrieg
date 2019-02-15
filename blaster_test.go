@@ -58,6 +58,7 @@ func TestSingleWorkerWorker(t *testing.T) {
 			Log:           logWriter,
 			Metrics:       metricWriter,
 			PeriodicWrite: time.Millisecond * 600,
+			OnEachRun: func(workerId int, workerContext *blitzkrieg.WorkerContext, stat blitzkrieg.Stats) {},
 			OnSegmentEnd:  func(segment blitzkrieg.HitSegment) {},
 			OnNextSegment: func(segment blitzkrieg.HitSegment) {},
 			Segments: []blitzkrieg.HitSegment{
@@ -134,6 +135,42 @@ func TestFunctionWorker(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	wg.Wait()
+}
+
+func TestWaitedTooLongWorker(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	
+	blits := blitzkrieg.New()
+	go func() {
+		defer wg.Done()
+		
+		_, err := blits.Start(context.Background(), blitzkrieg.Config{
+			Segments: []blitzkrieg.HitSegment{
+				{
+					Rate:    10,
+					MaxHits: 10,
+				},
+				{
+					Rate:    10,
+					MaxHits: 10,
+				},
+			},
+			WorkerFunc: func() blitzkrieg.Worker {
+				return &blitzkrieg.FunctionWorker{
+					SendFunc: func(ctx context.Context, lastWctx *blitzkrieg.WorkerContext) {
+						select {
+						
+						}
+					},
+				}
+			},
+		})
+		
+		require.Error(t, err)
+	}()
+	
 	wg.Wait()
 }
 
