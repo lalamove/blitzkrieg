@@ -18,7 +18,7 @@ of a API target.
 ```
 go get -u github.com/lalamove/blitzkrieg
 ```
- 
+
 ## Example
 
 
@@ -28,18 +28,19 @@ blits := blitzkrieg.New()
 stats, err := blits.Start(context.Background(), blitzkrieg.Config{
 	Segments: []blitzkrieg.HitSegment{
 		{
-			Rate:    10, // request X per second
+			Rate:    1000, // request X per second
 			MaxHits: 50,
 		},
 		{
-			Rate:    15, //  request X per second
+			Rate:    1500, //  request X per second
 			MaxHits: 100,
 		},
 		{
-			Rate:    20, //  request X per second
+			Rate:    2000, //  request X per second
 			MaxHits: 1000,
 		},
 	},
+	Workers: 200,
 	Metrics:       os.Stdout,
 	PeriodicWrite: time.Second * 3,
 	WorkerFunc: func() blitzkrieg.Worker {
@@ -79,61 +80,61 @@ Because Blitzkrieg uses the `status` text provided as a collation point, you wil
 the aggregated facts under each title of service with it's status. 
 
 ```
- 
+
 ====================================================
 Metrics
 ====================================================
-Concurrency:                          0 / 10 workers in use
+Concurrency:                          0 / 200 workers in use
 
-Desired rate:                         (all)       20         15        10
-Actual rate:                          19          20         15        10
-Avg concurrency:                      4           5          3         2
-Duration:                             01:02       00:50      00:06     00:05
+Desired rate (Per Second):            (all)       2000        1500       1000     ( Set Rate for each HitSegment )
+Actual rate  (Per Second):            335         295         368        437      ( Actual Observed rate of attack )
+Avg concurrency (Active):             194         199         199        159      ( Average active workers in each segment )
+Duration:                             00:08       00:05       00:02      00:01    ( Duration in seconds taking to complete segment )
 
 Total
 -----
-Started:                              1149        999        100       50
-Finished:                             1149        999        100       50
-Success:                              9           6          2         1
-Fail:                                 1140        993        98        49
-Mean:                                 252.0 ms    250.0 ms   260.0 ms  277.0 ms
-95th:                                 404.0 ms    404.0 ms   394.0 ms  425.0 ms
+Started:                              2999        1499        1000       500
+Finished:                             2999        1499        1000       500
+Success:                              29          17          8          4
+Fail:                                 2970        1482        992        496
+Mean:                                 545.0 ms    553.0 ms    540.0 ms   553.0 ms
+95th:                                 952.0 ms    952.0 ms    955.0 ms   958.0 ms
 
 hello-service (200)
 -------------------
-Count:                                9 (1%)      6 (1%)     2 (2%)    1 (2%)
-Mean:                                 309.0 ms    289.0 ms   349.0 ms  352.0 ms
-95th:                                 391.0 ms    357.0 ms   391.0 ms  352.0 ms
+Count:                                29 (1%)     17 (1%)     8 (1%)     4 (1%)
+Mean:                                 497.0 ms    420.0 ms    643.0 ms   534.0 ms
+95th:                                 973.0 ms    990.0 ms    919.0 ms   956.0 ms
 
 hello-service (400)
 -------------------
-Count:                                43 (4%)     31 (3%)    8 (8%)    4 (8%)
-Mean:                                 260.0 ms    259.0 ms   241.0 ms  310.0 ms
-95th:                                 408.0 ms    415.0 ms   375.0 ms  380.0 ms
+Count:                                85 (3%)     45 (3%)     22 (2%)    18 (4%)
+Mean:                                 590.0 ms    597.0 ms    577.0 ms   588.0 ms
+95th:                                 1004.0 ms   1004.0 ms   1013.0 ms  987.0 ms
 
 hello-service (499)
 -------------------
-Count:                                1097 (95%)  962 (96%)  90 (90%)  45 (90%)
-Mean:                                 252.0 ms    250.0 ms   259.0 ms  272.0 ms
-95th:                                 404.0 ms    404.0 ms   395.0 ms  428.0 ms
+Count:                                2885 (96%)  1437 (96%)  970 (97%)  478 (96%)
+Mean:                                 552.0 ms    553.0 ms    538.0 ms   552.0 ms
+95th:                                 961.0 ms    958.0 ms    955.0 ms   950.0 ms
 
 hello-service/sub-service-call (200)
 ------------------------------------
-Count:                                16 (1%)     14 (1%)    1 (1%)    1 (2%)
-Mean:                                 102.0 ms    102.0 ms   37.0 ms   166.0 ms
-95th:                                 166.0 ms    140.0 ms   37.0 ms   166.0 ms
+Count:                                17 (1%)     3 (0%)      11 (1%)    3 (1%)
+Mean:                                 107.0 ms    87.0 ms     108.0 ms   127.0 ms
+95th:                                 178.0 ms    112.0 ms    178.0 ms   167.0 ms
 
 hello-service/sub-service-call (400)
 ------------------------------------
-Count:                                40 (3%)     33 (3%)    5 (5%)    2 (4%)
-Mean:                                 103.0 ms    98.0 ms    126.0 ms  135.0 ms
-95th:                                 160.0 ms    153.0 ms   160.0 ms  176.0 ms
+Count:                                98 (3%)     52 (3%)     32 (3%)    14 (3%)
+Mean:                                 96.0 ms     96.0 ms     96.0 ms    99.0 ms
+95th:                                 167.0 ms    169.0 ms    172.0 ms   166.0 ms
 
 hello-service/sub-service-call (499)
 ------------------------------------
-Count:                                1093 (95%)  952 (95%)  94 (94%)  47 (94%)
-Mean:                                 100.0 ms    100.0 ms   104.0 ms  105.0 ms
-95th:                                 166.0 ms    166.0 ms   170.0 ms  182.0 ms
+Count:                                2884 (96%)  1444 (96%)  957 (96%)  483 (97%)
+Mean:                                 97.0 ms     101.0 ms    98.0 ms    99.0 ms
+95th:                                 163.0 ms    169.0 ms    162.0 ms   171.0 ms
 
 ====================================================
 
@@ -213,6 +214,10 @@ type Config struct {
 	Endless bool
 }
 ```
+
+Note: The amount of `Workers` sets in `Config.Workers` has a direct effect on the rates of request
+per second able to be made, so ensure the worker count is more than the maximum rate per second you have
+in all your hit segments.
 
 ## HitSegments
 

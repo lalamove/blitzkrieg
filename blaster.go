@@ -133,6 +133,7 @@ type Blaster struct {
 	hardTimeout time.Duration
 
 	sgml     sync.RWMutex
+	allSegment *HitSegment
 	segments []HitSegment
 
 	ctx    context.Context
@@ -185,12 +186,7 @@ func (b *Blaster) Start(ctx context.Context, c Config) (Stats, error) {
 
 	b.setTimeout(b.config.Timeout)
 
-	hit, ok := b.getCurrentSegment()
-	if !ok {
-		return Stats{}, errors.New("No attached HitSegment test")
-	}
-
-	b.metrics = newMetricsDef(b.config, hit)
+	b.metrics = newMetricsDef(b.config, b.allSegment)
 
 	b.workersFinishedChannel = make(chan struct{}, 0)
 	b.hitSegmentFinishedChannel = make(chan struct{}, 0)
@@ -223,8 +219,15 @@ func (b *Blaster) initialiseConfig(c Config) error {
 	if c.PeriodicWrite <= 0 {
 		c.PeriodicWrite = time.Second * 5
 	}
+	
+	var all HitSegment
+	for _, seg := range c.Segments {
+		all.Rate += seg.Rate
+		all.MaxHits += seg.MaxHits
+	}
 
 	b.config = &c
+	b.allSegment = &all
 	b.segments = c.Segments
 	return nil
 }
@@ -246,12 +249,12 @@ func (b *Blaster) getCurrentSegment() (HitSegment, bool) {
 }
 
 func (b *Blaster) start(ctx context.Context) error {
-	currentSegment, ok := b.getCurrentSegment()
+	hit, ok := b.getCurrentSegment()
 	if !ok {
-		return errors.New("No available HitSegments to use")
+		return errors.New("No attached HitSegment test")
 	}
-
-	b.metrics.addSegment(currentSegment)
+	
+	b.metrics.addSegment(&hit)
 
 	b.startTickerLoop(ctx)
 	b.startMainLoop(ctx)
@@ -553,15 +556,14 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 		b.error(errors.New(contextErrorMessage))
 		return nil
 	}
+	
+	if !newWorkContext.IsFinished() {
+		newWorkContext.SetResponse("UNFINISHED", Payload{}, errors.New("failed to finish"))
+	}
 
 	// if we did not finish the request, then we must inform that this was a
 	// and unfinished request.
-	if !newWorkContext.IsFinished() {
-		b.metrics.logSkip()
-	} else {
-		b.metrics.logFinish(newWorkContext.segment, newWorkContext.treePath(), time.Since(newWorkContext.sendStart), newWorkContext.Error() == nil)
-	}
-
+	b.metrics.logFinish(newWorkContext.segment, newWorkContext.treePath(), time.Since(newWorkContext.sendStart), newWorkContext.Error() == nil)
 	newWorkContext.buildMetric(b.metrics)
 
 	// Call the OnEachWorker function if set.
@@ -686,7 +688,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			b.sgml.Unlock()
 
 			// add new segment into our metrics collector.
-			b.metrics.addSegment(newSegment)
+			b.metrics.addSegment(&newSegment)
 
 			if b.config.OnNextSegment != nil {
 				b.config.OnNextSegment(newSegment)
@@ -726,6 +728,8 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				return
 			case hs := <-b.addHitSegment:
 				b.sgml.Lock()
+				b.allSegment.MaxHits += hs.MaxHits
+				b.allSegment.Rate += hs.Rate
 				b.segments = append(b.segments, hs)
 				b.sgml.Unlock()
 			}

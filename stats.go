@@ -127,7 +127,7 @@ func (m *metricsDef) stats() Stats {
 	s.All.Summary.NinetyFifth = time.Duration(m.all.total.finish.Percentile(0.95)/1000000.0) * time.Millisecond
 
 	for i, seg := range s.Segments {
-		seg.DesiredRate = m.segments[i].rate
+		seg.DesiredRate = m.segments[i].hit.Rate
 		seg.ActualRate = float64(m.segments[i].total.start.Count()) / m.segments[i].duration().Seconds()
 		seg.AverageConcurrency = m.segments[i].busy.Mean()
 		seg.Duration = m.segments[i].duration()
@@ -181,20 +181,20 @@ func (s Stats) String() string {
 	fmt.Fprintf(w, "Concurrency:\t%d / %d workers in use\n", s.ConcurrencyCurrent, s.ConcurrencyMaximum)
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Desired rate:\t(all)\t")
+	fmt.Fprint(w, "Desired rate (Per Second):\t(all)\t")
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].DesiredRate)
 	}
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Actual rate:\t")
+	fmt.Fprint(w, "Actual rate  (Per Second):\t")
 	fmt.Fprintf(w, "%.0f\t", s.All.ActualRate)
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].ActualRate)
 	}
 	fmt.Fprintf(w, "%s\n", tabs)
 
-	fmt.Fprint(w, "Avg concurrency:\t")
+	fmt.Fprint(w, "Avg concurrency (Active):\t")
 	fmt.Fprintf(w, "%.0f\t", s.All.AverageConcurrency)
 	for _, i := range segments {
 		fmt.Fprintf(w, "%.0f\t", s.Segments[i].AverageConcurrency)

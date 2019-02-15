@@ -28,14 +28,13 @@ func (s *singleSequenceWorker) Prepare(ctx context.Context) (*blitzkrieg.WorkerC
 	return blitzkrieg.NewWorkerContext("SleepWorker", blitzkrieg.Payload{}, nil), nil
 }
 
-func (s *singleSequenceWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
+func (s *singleSequenceWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) {
 	s.SendCalls++
 	time.Sleep(s.Timeout)
 	workerCtx.SetResponse("200", blitzkrieg.Payload{
 		Body:   []byte("Ready!"),
 		Params: map[string]string{"id": "1"},
 	}, nil)
-	return nil
 }
 
 func TestSingleWorkerWorker(t *testing.T) {
@@ -114,7 +113,7 @@ func TestFunctionWorker(t *testing.T) {
 			},
 			WorkerFunc: func() blitzkrieg.Worker {
 				return &blitzkrieg.FunctionWorker{
-					SendFunc: func(ctx context.Context, lastWctx *blitzkrieg.WorkerContext) error {
+					SendFunc: func(ctx context.Context, lastWctx *blitzkrieg.WorkerContext) {
 						require.Nil(t, lastWctx.Meta())
 						require.NoError(t, lastWctx.Error())
 						require.Empty(t, lastWctx.Status())
@@ -126,7 +125,7 @@ func TestFunctionWorker(t *testing.T) {
 						require.False(t, lastWctx.IsFinished())
 						require.NotNil(t, lastWctx.Request())
 
-						return lastWctx.SetResponse("200", blitzkrieg.Payload{}, nil)
+						lastWctx.SetResponse("200", blitzkrieg.Payload{}, nil)
 					},
 				}
 			},
@@ -150,16 +149,18 @@ func (s *multiSequenceWorker) Prepare(ctx context.Context) (*blitzkrieg.WorkerCo
 	return blitzkrieg.NewWorkerContext("multi-sequence-worker", blitzkrieg.Payload{}, nil), nil
 }
 
-func (s *multiSequenceWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
+func (s *multiSequenceWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) {
 
 	// initiate first sequence in multi-sequence requests
 	if err := s.doFirstSequence(ctx, workerCtx.FromContext("first-sequence", blitzkrieg.Payload{}, nil)); err != nil {
-		return err
+		workerCtx.SetResponse("200", blitzkrieg.Payload{}, err)
+		return
 	}
 
 	// initiate second sequence in multi-sequence requests
 	if err := s.doSecondSequence(ctx, workerCtx.FromContext("second-sequence", blitzkrieg.Payload{}, nil)); err != nil {
-		return err
+		workerCtx.SetResponse("200", blitzkrieg.Payload{}, err)
+		return
 	}
 
 	time.Sleep(s.Timeout)
@@ -169,7 +170,6 @@ func (s *multiSequenceWorker) Send(ctx context.Context, workerCtx *blitzkrieg.Wo
 		Body:   []byte("Ready!"),
 		Params: map[string]string{"id": "1"},
 	}, nil)
-	return nil
 }
 
 func (s *multiSequenceWorker) doSecondSequence(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
@@ -256,9 +256,8 @@ func (s *hitWorker) Prepare(ctx context.Context) (*blitzkrieg.WorkerContext, err
 	return blitzkrieg.NewWorkerContext("hit-worker", blitzkrieg.Payload{}, nil), nil
 }
 
-func (s *hitWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) error {
+func (s *hitWorker) Send(ctx context.Context, workerCtx *blitzkrieg.WorkerContext) {
 	atomic.AddInt64(&s.hits, 1)
-	return nil
 }
 
 func TestBlasterExitSignal(t *testing.T) {
