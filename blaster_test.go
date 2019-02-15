@@ -138,6 +138,45 @@ func TestFunctionWorker(t *testing.T) {
 	wg.Wait()
 }
 
+func TestWorkerWithoutWorkerContext(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	
+	blits := blitzkrieg.New()
+	go func() {
+		defer wg.Done()
+		
+		_, err := blits.Start(context.Background(), blitzkrieg.Config{
+			Segments: []blitzkrieg.HitSegment{
+				{
+					Rate:    10,
+					MaxHits: 10,
+				},
+				{
+					Rate:    10,
+					MaxHits: 10,
+				},
+			},
+			WorkerFunc: func() blitzkrieg.Worker {
+				return &blitzkrieg.FunctionWorker{
+					PrepareFunc: func(ctx context.Context) (workerContext *blitzkrieg.WorkerContext, e error) {
+						return nil, nil
+					},
+					SendFunc: func(ctx context.Context, lastWctx *blitzkrieg.WorkerContext) {
+						select {
+							
+						}
+					},
+				}
+			},
+		})
+		
+		require.Error(t, err)
+	}()
+	
+	wg.Wait()
+}
+
 func TestWaitedTooLongWorker(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
