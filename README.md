@@ -339,7 +339,7 @@ func (e *LalaWorker) Send(ctx context.Context,  workerContext *WorkerContext)  {
 	workerContext.SetResponse(resStatus, Payload{ Body: response }, err)
 }
 
-// Prepare Prepare should be where you load the sample data you wish to test your worker with.
+// Prepare should be where you load the sample data you wish to test your worker with.
 // You might need to implement some means of selectively or randomly loading different
 // data for your load tests here, as Blitzkrieg won't handle that for you.
 //
@@ -373,7 +373,7 @@ func (e *LalaWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
 	return blitskrieg.NewWorkerContext("raf-api-test", payload, serviceMeta), nil
 }
 
-// Start handle some base initialization logic you wish to be done before worker use.
+// Start handles some base initialization logic you wish to be done before worker use.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -382,7 +382,7 @@ func (e *LalaWorker) Start(ctx context.Context) error {
 	return nil
 }
 
-// You handle whatever cleanup you wish to be done for this worker.
+// Stop handles whatever cleanup you wish to be done for this worker.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -433,7 +433,7 @@ func (e *LalaWorker) Send(ctx context.Context,  workerContext *WorkerContext)  {
 	workerContext.SetResponse(resStatus, Payload{ Body: response }, err)
 }
 
-// Prepare Prepare should be where you load the sample data you wish to test your worker with.
+// Prepare should be where you load the sample data you wish to test your worker with.
 // You might need to implement some means of selectively or randomly loading different
 // data for your load tests here, as Blitzkrieg won't handle that for you.
 //
@@ -467,7 +467,7 @@ func (e *LalaWorker) Prepare(ctx context.Context) (*WorkerContext, error) {
 	return blitskrieg.NewWorkerContext("raf-api-test", payload, serviceMeta), nil
 }
 
-// Start handle some base initialization logic you wish to be done before worker use.
+// Start handles some base initialization logic you wish to be done before worker use.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -476,7 +476,7 @@ func (e *LalaWorker) Start(ctx context.Context) error {
 	return nil
 }
 
-// You handle whatever cleanup you wish to be done for this worker.
+// Stop handles whatever cleanup you wish to be done for this worker.
 //
 // Remember Blitskrieg will create multiple versions of this worker with the 
 // register WorkerFunc, so don't cause race conditions.
@@ -484,4 +484,3 @@ func (e *LalaWorker) Stop(ctx context.Context) error {
 	// do something....
 }
 ```
-
