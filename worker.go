@@ -117,6 +117,19 @@ type Payload struct {
 	Headers map[string][]string
 }
 
+// From clones giving body parameters and headers returning
+// a new Payload using supplied body.
+func (p Payload) From(newBody []byte) Payload {
+	var np Payload
+	np.Body = newBody
+	np.Params = map[string]string{}
+	np.Headers = map[string][]string{}
+	
+	for key, value := range p.Params{ np.Params[key] = value}
+	for key, values := range p.Headers{ np.Headers[key] = append(np.Headers[key], values...)}
+	return np
+}
+
 // IsNil implements gojay.MarshalJSONObject interface method.
 func (p Payload) IsNil() bool {
 	return false
