@@ -31,7 +31,7 @@ func TestPayload(t *testing.T){
 	
 	var withPayload = p.With(map[string]string{"gritter":"40"}, nil, nil)
 	require.NotEqual(t, p, withPayload)
-	require.NotEqual(t, p.Body, withPayload.Body)
+	require.Equal(t, p.Body, withPayload.Body)
 	require.Contains(t, withPayload.Headers["content"], "1")
 	require.Contains(t, withPayload.Headers["content"], "2")
 	require.Contains(t, withPayload.Headers["content"], "3")
