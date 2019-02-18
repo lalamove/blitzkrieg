@@ -143,6 +143,44 @@ func (p Payload) From(newBody []byte) Payload {
 	return np
 }
 
+// With clones giving payload's body, parameters and headers except for headers or parameters
+// that have new values from passed in params and headers map if any.
+//
+// If a body is provided then that body is used else, the body from this Payload is copied over
+// to new payload.
+func (p Payload) With(params map[string]string, headers map[string][]string, body []byte) Payload {
+	var np Payload
+	np.Body = body
+	
+	if body == nil {
+		np.Body = make([]byte, len(p.Body))
+		np.Body = np.Body[:copy(np.Body, p.Body)]
+	}
+	
+	np.Params = params
+	np.Headers = headers
+	
+	if np.Params == nil {
+		np.Params = map[string]string{}
+	}
+	if np.Headers == nil {
+		np.Headers = map[string][]string{}
+	}
+	
+	for key, values := range p.Headers{
+		if _, ok := np.Headers[key]; ok {
+			continue
+		}
+		np.Headers[key] = append(np.Headers[key], values...)
+	}
+	for key, value := range p.Params{
+		if _, ok := np.Params[key]; ok {
+			continue
+		}
+		np.Params[key] = value
+	}
+}
+
 // IsNil implements gojay.MarshalJSONObject interface method.
 func (p Payload) IsNil() bool {
 	return false
