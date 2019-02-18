@@ -59,8 +59,8 @@ func TestSingleWorkerWorker(t *testing.T) {
 			Metrics:       metricWriter,
 			PeriodicWrite: time.Millisecond * 600,
 			OnEachRun: func(workerId int, workerContext *blitzkrieg.WorkerContext, stat blitzkrieg.Stats) {},
-			OnSegmentEnd:  func(segment blitzkrieg.HitSegment) {},
-			OnNextSegment: func(segment blitzkrieg.HitSegment) {},
+			OnSegmentEnd:  func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
+			OnNextSegment: func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
 			Segments: []blitzkrieg.HitSegment{
 				{
 					Rate:    10,
@@ -287,8 +287,8 @@ func TestMultiSequenceWorker(t *testing.T) {
 			Log:           logWriter,
 			Metrics:       metricWriter,
 			PeriodicWrite: time.Millisecond * 60,
-			OnSegmentEnd:  func(segment blitzkrieg.HitSegment) {},
-			OnNextSegment: func(segment blitzkrieg.HitSegment) {},
+			OnSegmentEnd:  func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
+			OnNextSegment: func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
 			Segments: []blitzkrieg.HitSegment{
 				{
 					Rate:    10,
@@ -347,7 +347,7 @@ func TestBlasterExitSignal(t *testing.T) {
 		_, err := blits.Start(context.Background(), blitzkrieg.Config{
 			Workers: 3,
 			Endless: true,
-			OnSegmentEnd: func(_ blitzkrieg.HitSegment) {
+			OnSegmentEnd: func(_ blitzkrieg.HitSegment , stats blitzkrieg.Stats) {
 				done <- struct{}{}
 			},
 			Segments: []blitzkrieg.HitSegment{
@@ -409,7 +409,7 @@ func TestBlasterAddHitSegmentAfterFinishedSegment(t *testing.T) {
 		_, err := blits.Start(context.Background(), blitzkrieg.Config{
 			Workers: 5,
 			Endless: true,
-			OnSegmentEnd: func(_ blitzkrieg.HitSegment) {
+			OnSegmentEnd: func(_ blitzkrieg.HitSegment, stats blitzkrieg.Stats) {
 				w.Done()
 			},
 			Segments: []blitzkrieg.HitSegment{

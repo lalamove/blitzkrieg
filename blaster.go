@@ -63,10 +63,10 @@ type Config struct {
 	WorkerFunc WorkerFunc
 
 	// OnNextSegment sets a function to be executed once a new hit segment has begun.
-	OnNextSegment func(HitSegment)
+	OnNextSegment func(HitSegment, Stats)
 
 	// SegmentedEnded sets a function to be executed once a hit segment has finished.
-	OnSegmentEnd func(HitSegment)
+	OnSegmentEnd func(HitSegment,  Stats)
 
 	// OnEachRun sets a function to be called on every finished execution of a giving
 	// worker's request. This way you get access to the current Stats, worker id
@@ -673,7 +673,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				}
 
 				if b.config.OnSegmentEnd != nil {
-					b.config.OnSegmentEnd(currentSegment)
+					b.config.OnSegmentEnd(currentSegment, b.metrics.stats())
 				}
 
 				return true
@@ -691,7 +691,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			b.metrics.addSegment(&newSegment)
 
 			if b.config.OnNextSegment != nil {
-				b.config.OnNextSegment(newSegment)
+				b.config.OnNextSegment(newSegment, b.metrics.stats())
 			}
 
 			// update ticker with new segment changes.

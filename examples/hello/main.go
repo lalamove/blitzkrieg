@@ -18,7 +18,6 @@ var (
 func main() {
 
 	blits := blitzkrieg.New()
-
 	stats, err := blits.Start(context.Background(), blitzkrieg.Config{
 		Segments: []blitzkrieg.HitSegment{
 			{
