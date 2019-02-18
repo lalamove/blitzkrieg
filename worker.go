@@ -113,6 +113,7 @@ func (e *FunctionWorker) Stop(ctx context.Context) error {
 // body and possible parameters depending on the underline protocol logic.
 type Payload struct {
 	Body    []byte
+	Attached interface{}
 	Params  map[string]string
 	Headers map[string][]string
 }
