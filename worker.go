@@ -179,6 +179,7 @@ func (p Payload) With(params map[string]string, headers map[string][]string, bod
 		}
 		np.Params[key] = value
 	}
+	return np
 }
 
 // IsNil implements gojay.MarshalJSONObject interface method.
