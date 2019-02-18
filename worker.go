@@ -118,6 +118,18 @@ type Payload struct {
 	Headers map[string][]string
 }
 
+// AddParam adds a new item into payload params map.
+func (p *Payload) AddParam(key string, value string) {
+	if p.Params == nil {p.Params = map[string]string{}}
+	p.Params[key] = value
+}
+
+// AddHeader adds a new item into payload headers map.
+func (p *Payload) AddHeader(key string, values ...string) {
+	if p.Headers == nil {p.Headers = map[string][]string{}}
+	p.Headers[key] = append(p.Headers[key], values...)
+}
+
 // From clones giving body parameters and headers returning
 // a new Payload using supplied body.
 func (p Payload) From(newBody []byte) Payload {

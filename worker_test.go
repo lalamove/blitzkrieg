@@ -7,6 +7,24 @@ import (
 	"testing"
 )
 
+func TestPayload(t *testing.T){
+	var p blitzkrieg.Payload
+	
+	p.AddParam("param", "2")
+	require.Equal(t, p.Params["param"], "2")
+	
+	p.AddParam("litter", "1")
+	require.Equal(t, p.Params["litter"], "1")
+	
+	p.AddHeader("content", "1", "2", "3")
+	require.Contains(t, p.Headers["content"], "1")
+	require.Contains(t, p.Headers["content"], "2")
+	require.Contains(t, p.Headers["content"], "3")
+	
+	var newPayload = p.From([]byte("yes"))
+	require.NotEqual(t, p, newPayload)
+}
+
 func TestDefaultFunctionWorker(t *testing.T){
 	var w blitzkrieg.FunctionWorker
 	
