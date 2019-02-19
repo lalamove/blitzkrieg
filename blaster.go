@@ -19,6 +19,7 @@ import (
 
 var (
 	newline = []byte("\n")
+	attackLine = []byte("ATTACK: ")
 )
 
 var (
@@ -582,6 +583,7 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 	}
 
 	if b.config.Log != nil {
+		b.config.Log.Write(attackLine)
 		encoder := gojay.BorrowEncoder(b.config.Log)
 		if err := encoder.EncodeObject(newWorkContext); err != nil {
 			b.printf("Failed to encode WorkerContext: %+s", err)
