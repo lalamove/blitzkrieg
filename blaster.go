@@ -118,6 +118,12 @@ type Config struct {
 	// We exit with an error if any worker is processing for timeout + 1 second.
 	// (Default: 1 second).
 	Timeout time.Duration
+	
+	// HitCoolOff sets the duration for which we cool off before starting the next
+	// hit segments, this allows us to provide some time for the API to respond to
+	// pending possible requests.
+	// (Default: 1 second).
+	HitCoolOff time.Duration
 
 	// Endless sets whether the blaster should still continue working, if it has exhausted
 	// it's segments list. This allows us dynamically deliver new segments to be delivered
@@ -218,6 +224,10 @@ func (b *Blaster) initialiseConfig(c Config) error {
 
 	if c.PeriodicWrite <= 0 {
 		c.PeriodicWrite = time.Second * 5
+	}
+	
+	if c.HitCoolOff <= 0 {
+		c.HitCoolOff = time.Second
 	}
 	
 	var all HitSegment
@@ -678,6 +688,9 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 
 				return true
 			}
+			
+			// Cool off before we start the next hit segment
+			time.Sleep(b.config.HitCoolOff)
 
 			// eject last segment and update ticker.
 			var newSegment HitSegment
