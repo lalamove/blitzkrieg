@@ -236,6 +236,20 @@ func (p headersEncodable) MarshalJSONObject(enc *gojay.Encoder) {
 	}
 }
 
+type workerContextListEncodable []*WorkerContext
+
+// IsNil implements gojay.MarshalJSONObject interface method.
+func (p workerContextListEncodable) IsNil() bool {
+	return false
+}
+
+// MarshalJSONObject implements gojay.MarshalJSONObject interface method.
+func (p workerContextListEncodable) MarshalJSONArray(enc *gojay.Encoder) {
+	for _, value := range p {
+		enc.AddObject(value)
+	}
+}
+
 // WorkerContext exists to define and contain the request body, headers and
 // response content, header and status for a giving request work done by
 // a worker. It also provides a means of providing response from a previous
@@ -392,6 +406,8 @@ func (w *WorkerContext) MarshalJSONObject(enc *gojay.Encoder) {
 	if w.workerErr != nil {
 		enc.StringKey("response_error", w.workerErr.Error())
 	}
+	
+	enc.ArrayKey("children",workerContextListEncodable(w.children))
 }
 
 // Response returns Payload for giving response, this is only ever available
