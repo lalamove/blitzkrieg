@@ -289,6 +289,9 @@ func TestMultiSequenceWorker(t *testing.T) {
 			PeriodicWrite: time.Millisecond * 60,
 			OnSegmentEnd:  func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
 			OnNextSegment: func(segment blitzkrieg.HitSegment, stats blitzkrieg.Stats) {},
+			OnEachRun: func(workerId int, workerContext *blitzkrieg.WorkerContext, stat blitzkrieg.Stats) {},
+			FilterChildWorkerContext: func(workerContext *blitzkrieg.WorkerContext, i int) bool { return true},
+			FilterWorkerContext: func(workerContext *blitzkrieg.WorkerContext) bool {return true},
 			Segments: []blitzkrieg.HitSegment{
 				{
 					Rate:    10,

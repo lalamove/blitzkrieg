@@ -161,10 +161,10 @@ type Config struct {
 	
 	// FilterChildWorkerContext sets a function which will be used if available to filter
 	// out which WorkerContext child within a root WorkerContext will be logged into the
-	// Config.Log writer.
+	// Config.Log writer. It also passes the level of which this child WorkerContext belongs.
 	//
 	// If function returns true, then WorkerContext will be logged, else not logged.
-	FilterChildWorkerContext func(*WorkerContext) bool
+	FilterChildWorkerContext func(*WorkerContext, int) bool
 
 	// OnNextSegment sets a function to be executed once a new hit segment has begun.
 	OnNextSegment func(HitSegment, Stats)

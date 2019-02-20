@@ -251,7 +251,7 @@ func (p workerContextListEncodable) IsNil() bool {
 func (p workerContextListEncodable) MarshalJSONArray(enc *gojay.Encoder) {
 	for _, value := range p {
 		if value.config != nil && value.config.FilterChildWorkerContext != nil {
-			if !value.config.FilterChildWorkerContext(value){
+			if !value.config.FilterChildWorkerContext(value, value.level){
 				continue
 			}
 		}
@@ -269,6 +269,7 @@ func (p workerContextListEncodable) MarshalJSONArray(enc *gojay.Encoder) {
 // intended to be.
 type WorkerContext struct {
 	config *Config
+	level int
 	segment     int
 	worker      int
 	hitseg      HitSegment
@@ -329,6 +330,7 @@ func requestWorkerContext(title string, req Payload, meta interface{}, last *Wor
 	if last != nil {
 		w.config = last.config
 		w.sendStart = w.start
+		w.level = last.level + 1
 		w.segmentID = fmt.Sprintf("%s/%s", last.segmentID, title)
 		last.children = append(last.children, w)
 		w.segment = last.segment
