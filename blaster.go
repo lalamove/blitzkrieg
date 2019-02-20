@@ -811,6 +811,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				var currentCount = atomic.LoadInt64(&b.currentHits)
 				b.printf("Sending segment %d for processing at hit %d \n", segment, currentCount)
 				atomic.AddInt64(&b.currentHits, 1)
+				continue
 			default:
 				// if main loop is busy, skip this tick
 				// and retry again.
