@@ -152,12 +152,25 @@ Blitzkrieg provides the `Config` type with it's field which may have defaults fo
 type Config struct {
 	// WorkerFunc is responsible for generating workers for load-testing.
 	WorkerFunc WorkerFunc
+	
+	// FilterWorkerContext sets a function which will be used if available to filter
+	// out which root WorkerContext will be logged into the Config.Log writer.
+	//
+	// If function returns true, then WorkerContext will be logged, else not logged.
+	FilterWorkerContext func(*WorkerContext) bool
+	
+	// FilterChildWorkerContext sets a function which will be used if available to filter
+	// out which WorkerContext child within a root WorkerContext will be logged into the
+	// Config.Log writer.
+	//
+	// If function returns true, then WorkerContext will be logged, else not logged.
+	FilterChildWorkerContext func(*WorkerContext) bool
 
 	// OnNextSegment sets a function to be executed once a new hit segment has begun.
-	OnNextSegment func(HitSegment)
+	OnNextSegment func(HitSegment, Stats)
 
 	// SegmentedEnded sets a function to be executed once a hit segment has finished.
-	OnSegmentEnd func(HitSegment)
+	OnSegmentEnd func(HitSegment,  Stats)
 
 	// OnEachRun sets a function to be called on every finished execution of a giving
 	// worker's request. This way you get access to the current Stats, worker id
@@ -170,8 +183,8 @@ type Config struct {
 	// DefaultHeaders contains default headers that all workers must include
 	// in their requests.
 	//
-	// All header values are copied/appended into the initial content of a worker 
-	// WorkerContext, if an existing header is found then it will append default 
+	// All header values are copied/appended into the initial content of a worker
+	// WorkerContext, if an existing header is found then it will append default
 	// header values into key header list.
 	//
 	// The header is also returned by the call to Worker.Prepare.
@@ -188,7 +201,7 @@ type Config struct {
 	// Log sets the Writer to write internal blaster logs into.
 	Log io.Writer
 
-	// Metrics sets the Writer to write periodic stats of blaster into.
+	// Metrics sets the Writer to write period stats of blaster into.
 	Metrics io.Writer
 
 	// PeriodicWrite sets the intervals at which the current stats of the
@@ -200,15 +213,21 @@ type Config struct {
 	// rates and max hits which will be used for each worker.
 	Segments []HitSegment
 
-	// Workers sets the number of concurrent workers to be used. 
+	// Workers sets the number of concurrent workers to be used.
 	// (Default: 10 workers).
 	Workers int
 
-	// Timeout sets the deadline in the context passed to the worker. Workers must 
+	// Timeout sets the deadline in the context passed to the worker. Workers must
 	// respect the context cancellation.
 	// We exit with an error if any worker is processing for timeout + 1 second.
 	// (Default: 1 second).
 	Timeout time.Duration
+	
+	// HitCoolOff sets the duration for which we cool off before starting the next
+	// hit segments, this allows us to provide some time for the API to respond to
+	// pending possible requests.
+	// (Default: 1 second).
+	HitCoolOff time.Duration
 
 	// Endless sets whether the blaster should still continue working, if it has exhausted
 	// it's segments list. This allows us dynamically deliver new segments to be delivered
