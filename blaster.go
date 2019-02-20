@@ -764,9 +764,8 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				}
 			}
 
-			// We will only ever increment the hits only when
-			// a worker was successfully a able to pick up work
-			// in main loop.
+			// We only can move onto the next segment once completed
+			// else move on to current segment next hit.
 			var completedCount = int(atomic.LoadInt64(&b.completedHits))
 			if checkSegment(completedCount, currentSegment) {
 				b.println("Resetting hit count for new segment")
