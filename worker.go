@@ -192,6 +192,10 @@ func (p Payload) MarshalJSONObject(encoder *gojay.Encoder) {
 	encoder.StringKey("body", string(p.Body))
 	encoder.ObjectKey("params", paramEncodable(p.Params))
 	encoder.ObjectKey("headers", headersEncodable(p.Headers))
+	
+	if p.Attached != nil {
+		encoder.AddInterfaceKey("attached", p.Attached)
+	}
 }
 
 type paramEncodable map[string]string
