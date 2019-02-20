@@ -658,18 +658,7 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 		ticker = time.NewTicker(time.Nanosecond * time.Duration(nsPerTick))
 	}
 
-	checkSegment := func(lastHits int) bool {
-		currentSegment, ok := b.getCurrentSegment()
-		if !ok {
-			// signal end of segments test list if not endless.
-			if !b.config.Endless {
-				b.println("No more hit segments, closing segment worker")
-				close(b.hitSegmentFinishedChannel)
-			}
-
-			return false
-		}
-
+	checkSegment := func(lastHits int, currentSegment HitSegment) bool {
 		b.printf("Checking max hits at %d for segment %#v \n", lastHits, currentSegment)
 
 		// if we match the current allowed hits for this segment with
@@ -760,31 +749,32 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				b.println("No more hit segments, waiting for new ones...")
 				continue
 			}
+			
+			var currentSegment, ok = b.getCurrentSegment()
+			if !ok {
+				// notest
+				select {
+				case <-ctx.Done():
+					return
+				case <-b.hitSegmentFinishedChannel:
+					// notest
+					return
+				default:
+					continue
+				}
+			}
 
 			// We will only ever increment the hits only when
 			// a worker was successfully a able to pick up work
 			// in main loop.
 			var completedCount = int(atomic.LoadInt64(&b.completedHits))
-			if checkSegment(completedCount) {
+			if checkSegment(completedCount, currentSegment) {
 				b.println("Resetting hit count for new segment")
 				atomic.StoreInt64(&b.completedHits, 0)
 				atomic.StoreInt64(&b.currentHits, 0)
 				continue
 			}
 			
-			var currentSegment, ok = b.getCurrentSegment()
-			if !ok {
-				// notest
-				select {
-					case <-ctx.Done():
-						return
-					case <-b.hitSegmentFinishedChannel:
-						// notest
-						return
-					default:
-						continue
-				}
-			}
 			
 			// If we have reached here and maximum sent segment is
 			// exactly the same as HitSegments.MaxHits, then workers
