@@ -62,6 +62,19 @@ func (hs *HitSegment) init() {
 type Config struct {
 	// WorkerFunc is responsible for generating workers for load-testing.
 	WorkerFunc WorkerFunc
+	
+	// FilterWorkerContext sets a function which will be used if available to filter
+	// out which root WorkerContext will be logged into the Config.Log writer.
+	//
+	// If function returns true, then WorkerContext will be logged, else not logged.
+	FilterWorkerContext func(*WorkerContext) bool
+	
+	// FilterChildWorkerContext sets a function which will be used if available to filter
+	// out which WorkerContext child within a root WorkerContext will be logged into the
+	// Config.Log writer.
+	//
+	// If function returns true, then WorkerContext will be logged, else not logged.
+	FilterChildWorkerContext func(*WorkerContext) bool
 
 	// OnNextSegment sets a function to be executed once a new hit segment has begun.
 	OnNextSegment func(HitSegment, Stats)
@@ -533,6 +546,7 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 	}
 
 	newWorkContext.hitseg = hit
+	newWorkContext.config = b.config
 	newWorkContext.worker = workerID
 	newWorkContext.segment = segmentID
 
@@ -588,6 +602,14 @@ func (b *Blaster) send(ctx context.Context, w Worker, workerID int, segmentID in
 	}
 
 	if b.config.Log != nil {
+		// if filtering function is provided, use to decide if we should
+		// log this worker context.
+		if b.config.FilterWorkerContext != nil {
+			if !b.config.FilterWorkerContext(newWorkContext) {
+				return nil
+			}
+		}
+		
 		b.config.Log.Write(attackLine)
 		encoder := gojay.BorrowEncoder(b.config.Log)
 		if err := encoder.EncodeObject(newWorkContext); err != nil {

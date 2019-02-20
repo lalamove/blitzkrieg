@@ -250,6 +250,11 @@ func (p workerContextListEncodable) IsNil() bool {
 // MarshalJSONObject implements gojay.MarshalJSONObject interface method.
 func (p workerContextListEncodable) MarshalJSONArray(enc *gojay.Encoder) {
 	for _, value := range p {
+		if value.config != nil && value.config.FilterChildWorkerContext != nil {
+			if !value.config.FilterChildWorkerContext(value){
+				continue
+			}
+		}
 		enc.AddObject(value)
 	}
 }
@@ -263,6 +268,7 @@ func (p workerContextListEncodable) MarshalJSONArray(enc *gojay.Encoder) {
 // WorkerContext is not safe for concurrent use by multiple go-routines, nor is it
 // intended to be.
 type WorkerContext struct {
+	config *Config
 	segment     int
 	worker      int
 	hitseg      HitSegment
@@ -321,6 +327,7 @@ func requestWorkerContext(title string, req Payload, meta interface{}, last *Wor
 	w.start = time.Now()
 
 	if last != nil {
+		w.config = last.config
 		w.sendStart = w.start
 		w.segmentID = fmt.Sprintf("%s/%s", last.segmentID, title)
 		last.children = append(last.children, w)
