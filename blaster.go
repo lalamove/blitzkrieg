@@ -148,6 +148,8 @@ type Blaster struct {
 
 	mainChannel               chan int
 	workerChannel             chan int
+	currentHits int64
+	completedHits int64
 	errorChannel              chan error
 	hitSegmentFinishedChannel chan struct{}
 	workersFinishedChannel    chan struct{}
@@ -482,6 +484,9 @@ func (b *Blaster) startWorkers(ctx context.Context) {
 						// only used in tests
 						b.itemFinishedChannel <- struct{}{}
 					}
+					
+					// increment completed count for hits.
+					atomic.AddInt64(&b.completedHits, 1)
 				case <-ticker.C:
 					// if no work is available, just schedule next goroutine.
 					runtime.Gosched()
@@ -729,7 +734,6 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			}
 		}()
 
-		var totalHits int64
 		for {
 
 			// First wait for a tick... but we should also wait for an exit signal, data finished
@@ -760,14 +764,39 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 			// We will only ever increment the hits only when
 			// a worker was successfully a able to pick up work
 			// in main loop.
-			var newCount = atomic.LoadInt64(&totalHits)
-			if checkSegment(int(newCount)) {
+			var completedCount = int(atomic.LoadInt64(&b.completedHits))
+			if checkSegment(completedCount) {
 				b.println("Resetting hit count for new segment")
-				atomic.StoreInt64(&totalHits, 0)
+				atomic.StoreInt64(&b.completedHits, 0)
+				atomic.StoreInt64(&b.currentHits, 0)
 				continue
 			}
-
-			segment := b.metrics.currentSegment()
+			
+			var currentSegment, ok = b.getCurrentSegment()
+			if !ok {
+				// notest
+				select {
+					case <-ctx.Done():
+						return
+					case <-b.hitSegmentFinishedChannel:
+						// notest
+						return
+					default:
+						continue
+				}
+			}
+			
+			// If we have reached here and maximum sent segment is
+			// exactly the same as HitSegments.MaxHits, then workers
+			// are not done yet, so we retry at another tick, till
+			// either workers are done or the context timeout for them
+			// is reached.
+			var sentCount = int(atomic.LoadInt64(&b.currentHits))
+			if sentCount == currentSegment.MaxHits {
+				continue
+			}
+			
+			var segment = b.metrics.currentSegment()
 
 			// Next send on the main channel. The channel won't have a listener if there is no idle
 			// worker. In this case we should continue and log a miss.
@@ -779,9 +808,9 @@ func (b *Blaster) startTickerLoop(ctx context.Context) {
 				// notest
 				return
 			case b.mainChannel <- segment:
-				var currentCount = atomic.LoadInt64(&totalHits)
+				var currentCount = atomic.LoadInt64(&b.currentHits)
 				b.printf("Sending segment %d for processing at hit %d \n", segment, currentCount)
-				atomic.AddInt64(&totalHits, 1)
+				atomic.AddInt64(&b.currentHits, 1)
 			default:
 				// if main loop is busy, skip this tick
 				// and retry again.
